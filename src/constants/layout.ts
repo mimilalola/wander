@@ -1,15 +1,16 @@
 export const Layout = {
-  padding: 16,
-  paddingSmall: 8,
-  paddingLarge: 24,
-  borderRadius: 12,
-  borderRadiusSmall: 8,
-  borderRadiusLarge: 16,
-  cardShadow: {
+  padding: 20,
+  paddingSmall: 10,
+  paddingLarge: 32,
+  borderRadius: 8,
+  borderRadiusSmall: 6,
+  borderRadiusLarge: 8,
+  sectionGap: 40,
+  subtleShadow: {
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.08,
-    shadowRadius: 8,
-    elevation: 3,
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.04,
+    shadowRadius: 4,
+    elevation: 1,
   },
 };

@@ -92,4 +92,19 @@ export async function initializeDatabase(db: SQLiteDatabase) {
       ('good bar'), ('rooftop'), ('historic'), ('modern'),
       ('eco'), ('family'), ('luxury'), ('budget');
   `);
+
+  // Migrations for new columns (safe to run multiple times)
+  const migrations = [
+    `ALTER TABLE visits ADD COLUMN emotion TEXT`,
+    `ALTER TABLE visits ADD COLUMN nights INTEGER`,
+    `ALTER TABLE users ADD COLUMN bio TEXT`,
+  ];
+
+  for (const migration of migrations) {
+    try {
+      await db.execAsync(migration);
+    } catch {
+      // Column already exists — ignore
+    }
+  }
 }

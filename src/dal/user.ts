@@ -12,18 +12,18 @@ export async function getUser(db: Database) {
 
 export async function updateUser(
   db: Database,
-  data: { name?: string; username?: string; location?: string; profilePhoto?: string }
+  data: { name?: string; username?: string; location?: string; profilePhoto?: string; bio?: string }
 ) {
   await db.update(schema.users).set(data).where(eq(schema.users.id, DEFAULT_USER_ID));
 }
 
 export async function getProfileStats(db: Database, userId: number): Promise<ProfileStats> {
-  const wantedResult = await db
+  const savedResult = await db
     .select({ count: sql<number>`COUNT(*)` })
     .from(schema.saves)
     .where(sql`${schema.saves.userId} = ${userId} AND ${schema.saves.status} = 'want'`);
 
-  const visitedResult = await db
+  const sleptResult = await db
     .select({ count: sql<number>`COUNT(DISTINCT ${schema.visits.hotelId})` })
     .from(schema.visits)
     .where(eq(schema.visits.userId, userId));
@@ -64,12 +64,22 @@ export async function getProfileStats(db: Database, userId: number): Promise<Pro
     .orderBy(sql`COUNT(*) DESC`)
     .limit(5);
 
+  // Build taste summary from top 3 tags
+  const tasteWords = topTags.slice(0, 3).map((t) => {
+    const word = t.tag.charAt(0).toUpperCase() + t.tag.slice(1);
+    return word;
+  });
+  const tasteSummary = tasteWords.length > 0
+    ? `Mostly ${tasteWords.join(' \u00B7 ')}`
+    : '';
+
   return {
-    hotelsWanted: wantedResult[0]?.count ?? 0,
-    hotelsVisited: visitedResult[0]?.count ?? 0,
+    hotelsSaved: savedResult[0]?.count ?? 0,
+    hotelsSlept: sleptResult[0]?.count ?? 0,
     averageRating: avgResult[0]?.avg ?? null,
     topCities,
     topTags,
     countriesVisited: countriesResult[0]?.count ?? 0,
+    tasteSummary,
   };
 }

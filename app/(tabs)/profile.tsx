@@ -75,12 +75,12 @@ export default function ProfileScreen() {
         {/* Stats Grid */}
         <View style={styles.statsGrid}>
           <View style={styles.statItem}>
-            <Text style={styles.statNumber}>{stats?.hotelsWanted ?? 0}</Text>
+            <Text style={styles.statNumber}>{stats?.hotelsSaved ?? 0}</Text>
             <Text style={styles.statLabel}>Wishlist</Text>
           </View>
           <View style={styles.statDivider} />
           <View style={styles.statItem}>
-            <Text style={styles.statNumber}>{stats?.hotelsVisited ?? 0}</Text>
+            <Text style={styles.statNumber}>{stats?.hotelsSlept ?? 0}</Text>
             <Text style={styles.statLabel}>Visited</Text>
           </View>
           <View style={styles.statDivider} />
@@ -126,7 +126,7 @@ export default function ProfileScreen() {
         )}
 
         {/* Empty state */}
-        {stats && stats.hotelsVisited === 0 && stats.hotelsWanted === 0 && (
+        {stats && stats.hotelsSlept === 0 && stats.hotelsSaved === 0 && (
           <View style={styles.emptySection}>
             <Ionicons name="compass-outline" size={48} color={Colors.textLight} />
             <Text style={styles.emptyText}>Start exploring to build your taste profile</Text>

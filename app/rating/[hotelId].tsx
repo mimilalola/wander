@@ -431,7 +431,7 @@ const styles = StyleSheet.create({
     borderRadius: Layout.borderRadius,
     padding: 24,
     alignItems: 'center',
-    ...Layout.cardShadow,
+    ...Layout.subtleShadow,
   },
   summaryHotel: {
     fontSize: 20,

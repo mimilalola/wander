@@ -156,7 +156,7 @@ export default function HotelDetailScreen() {
             <Ionicons
               name={hotel.save?.status === 'want' ? 'heart' : 'heart-outline'}
               size={20}
-              color={hotel.save?.status === 'want' ? Colors.white : Colors.want}
+              color={hotel.save?.status === 'want' ? Colors.white : Colors.saved}
             />
             <Text
               style={[
@@ -179,7 +179,7 @@ export default function HotelDetailScreen() {
             <Ionicons
               name={hotel.save?.status === 'been' ? 'checkmark-circle' : 'checkmark-circle-outline'}
               size={20}
-              color={hotel.save?.status === 'been' ? Colors.white : Colors.been}
+              color={hotel.save?.status === 'been' ? Colors.white : Colors.slept}
             />
             <Text
               style={[
@@ -284,7 +284,7 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.white,
     justifyContent: 'center',
     alignItems: 'center',
-    ...Layout.cardShadow,
+    ...Layout.subtleShadow,
   },
   statusContainer: {
     position: 'absolute',
@@ -345,12 +345,12 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   activeWant: {
-    backgroundColor: Colors.want,
-    borderColor: Colors.want,
+    backgroundColor: Colors.saved,
+    borderColor: Colors.saved,
   },
   activeBeen: {
-    backgroundColor: Colors.been,
-    borderColor: Colors.been,
+    backgroundColor: Colors.slept,
+    borderColor: Colors.slept,
   },
   actionText: {
     fontSize: 15,

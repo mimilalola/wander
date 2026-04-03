@@ -23,10 +23,10 @@ const styles = StyleSheet.create({
     borderRadius: 12,
   },
   want: {
-    backgroundColor: Colors.want + '20',
+    backgroundColor: Colors.saved + '20',
   },
   been: {
-    backgroundColor: Colors.been + '20',
+    backgroundColor: Colors.slept + '20',
   },
   text: {
     fontSize: 12,

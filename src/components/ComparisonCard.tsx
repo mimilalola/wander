@@ -39,7 +39,7 @@ export function ComparisonCard({ hotelA, hotelB, onSelectA, onSelectB }: Compari
 
         <TouchableOpacity style={styles.card} onPress={onSelectB} activeOpacity={0.7}>
           <View style={styles.iconContainer}>
-            <Ionicons name="bed-outline" size={28} color={Colors.want} />
+            <Ionicons name="bed-outline" size={28} color={Colors.saved} />
           </View>
           <Text style={styles.hotelName} numberOfLines={2}>{hotelB.name}</Text>
           <Text style={styles.location}>{hotelB.city}, {hotelB.country}</Text>
@@ -71,7 +71,7 @@ const styles = StyleSheet.create({
     borderRadius: Layout.borderRadius,
     padding: 16,
     alignItems: 'center',
-    ...Layout.cardShadow,
+    ...Layout.subtleShadow,
   },
   iconContainer: {
     width: 56,

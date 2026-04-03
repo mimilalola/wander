@@ -70,7 +70,7 @@ const styles = StyleSheet.create({
     borderRadius: Layout.borderRadius,
     overflow: 'hidden',
     marginBottom: 12,
-    ...Layout.cardShadow,
+    ...Layout.subtleShadow,
   },
   imageContainer: {
     height: 160,

@@ -8,6 +8,7 @@ export const users = sqliteTable('users', {
   email: text('email'),
   profilePhoto: text('profile_photo'),
   location: text('location'),
+  bio: text('bio'),
   isPrivate: integer('is_private', { mode: 'boolean' }).notNull().default(false),
   createdAt: text('created_at').notNull().default(sql`CURRENT_TIMESTAMP`),
 });
@@ -41,6 +42,8 @@ export const visits = sqliteTable('visits', {
   rating: integer('rating'),
   rank: real('rank').default(1500),
   notes: text('notes'),
+  emotion: text('emotion').$type<'loved' | 'nice' | 'wouldnt_return'>(),
+  nights: integer('nights'),
   createdAt: text('created_at').notNull().default(sql`CURRENT_TIMESTAMP`),
 });
 

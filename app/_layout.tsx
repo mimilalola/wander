@@ -12,7 +12,6 @@ export default function RootLayout() {
           headerShown: false,
           contentStyle: { backgroundColor: '#fafafa' },
           animation: 'slide_from_right',
-          gestureEnabled: true,
         }}
       >
         <Stack.Screen name="(tabs)" />
@@ -21,7 +20,6 @@ export default function RootLayout() {
           options={{
             animation: 'slide_from_bottom',
             presentation: 'modal',
-            gestureEnabled: true,
           }}
         />
         <Stack.Screen
@@ -29,7 +27,6 @@ export default function RootLayout() {
           options={{
             animation: 'slide_from_bottom',
             presentation: 'modal',
-            gestureEnabled: true,
           }}
         />
         <Stack.Screen name="hotel/[id]" />
@@ -38,7 +35,6 @@ export default function RootLayout() {
           options={{
             animation: 'slide_from_bottom',
             presentation: 'fullScreenModal',
-            gestureEnabled: false,
           }}
         />
       </Stack>

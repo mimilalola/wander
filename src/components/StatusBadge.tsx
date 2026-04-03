@@ -11,7 +11,7 @@ export function StatusBadge({ status }: StatusBadgeProps) {
   const isWant = status === 'want';
   return (
     <View style={[styles.badge, isWant ? styles.want : styles.been]}>
-      <Text style={styles.text}>{isWant ? '❤️ Want' : '🛎️ Been'}</Text>
+      <Text style={styles.text}>{isWant ? 'Saved' : 'Slept'}</Text>
     </View>
   );
 }

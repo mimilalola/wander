@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Image, StyleSheet, TouchableOpacity, FlatList } from 'react-native';
+import { View, Image, StyleSheet, TouchableOpacity, ScrollView } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors } from '../constants/colors';
 import { Layout } from '../constants/layout';
@@ -10,57 +10,63 @@ interface PhotoGridProps {
 }
 
 export function PhotoGrid({ photos, onAddPhoto }: PhotoGridProps) {
-  const data = onAddPhoto ? [...photos, { id: -1, imageUri: '' }] : photos;
+  if (photos.length === 0 && onAddPhoto) {
+    return (
+      <TouchableOpacity style={styles.addButtonLarge} onPress={onAddPhoto} activeOpacity={0.7}>
+        <Ionicons name="camera-outline" size={28} color={Colors.textSecondary} />
+      </TouchableOpacity>
+    );
+  }
 
   return (
-    <FlatList
-      data={data}
-      numColumns={3}
-      keyExtractor={(item) => item.id.toString()}
-      scrollEnabled={false}
-      contentContainerStyle={styles.grid}
-      renderItem={({ item }) => {
-        if (item.id === -1) {
-          return (
-            <TouchableOpacity style={styles.addButton} onPress={onAddPhoto} activeOpacity={0.7}>
-              <Ionicons name="add" size={28} color={Colors.textSecondary} />
-            </TouchableOpacity>
-          );
-        }
-        return (
-          <View style={styles.photoContainer}>
-            <Image source={{ uri: item.imageUri }} style={styles.photo} />
-          </View>
-        );
-      }}
-    />
+    <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.scroll}>
+      {photos.map((photo) => (
+        <View key={photo.id} style={styles.photoContainer}>
+          <Image source={{ uri: photo.imageUri }} style={styles.photo} />
+        </View>
+      ))}
+      {onAddPhoto && (
+        <TouchableOpacity style={styles.addButton} onPress={onAddPhoto} activeOpacity={0.7}>
+          <Ionicons name="add" size={24} color={Colors.textSecondary} />
+        </TouchableOpacity>
+      )}
+    </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
-  grid: {
-    gap: 4,
+  scroll: {
+    flexGrow: 0,
   },
   photoContainer: {
-    flex: 1,
-    aspectRatio: 1,
-    margin: 2,
-    borderRadius: Layout.borderRadiusSmall,
+    width: 200,
+    height: 150,
+    marginRight: 12,
+    borderRadius: Layout.borderRadius,
     overflow: 'hidden',
-    maxWidth: '33%',
   },
   photo: {
     width: '100%',
     height: '100%',
   },
   addButton: {
-    flex: 1,
-    aspectRatio: 1,
-    margin: 2,
-    borderRadius: Layout.borderRadiusSmall,
-    backgroundColor: Colors.borderLight,
+    width: 80,
+    height: 150,
+    borderRadius: Layout.borderRadius,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    borderStyle: 'dashed',
     justifyContent: 'center',
     alignItems: 'center',
-    maxWidth: '33%',
+  },
+  addButtonLarge: {
+    width: '100%',
+    height: 120,
+    borderRadius: Layout.borderRadius,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    borderStyle: 'dashed',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
 });

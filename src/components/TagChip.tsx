@@ -1,6 +1,7 @@
 import React from 'react';
 import { Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { Colors } from '../constants/colors';
+import { Layout } from '../constants/layout';
 
 interface TagChipProps {
   name: string;
@@ -25,13 +26,16 @@ const styles = StyleSheet.create({
   chip: {
     paddingHorizontal: 14,
     paddingVertical: 6,
-    borderRadius: 16,
-    backgroundColor: Colors.borderLight,
+    borderRadius: Layout.borderRadiusSmall,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    backgroundColor: 'transparent',
     marginRight: 8,
     marginBottom: 8,
   },
   selected: {
-    backgroundColor: Colors.accent,
+    borderColor: Colors.accent,
+    backgroundColor: Colors.accentLight,
   },
   text: {
     fontSize: 13,
@@ -39,6 +43,6 @@ const styles = StyleSheet.create({
     fontWeight: '500',
   },
   selectedText: {
-    color: Colors.white,
+    color: Colors.accent,
   },
 });

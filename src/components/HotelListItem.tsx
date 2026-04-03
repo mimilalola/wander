@@ -3,6 +3,7 @@ import { View, Text, StyleSheet, TouchableOpacity, Image } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors } from '../constants/colors';
 import { Layout } from '../constants/layout';
+import { Typography } from '../constants/typography';
 import { PriceLevel } from './PriceLevel';
 
 interface HotelListItemProps {
@@ -37,7 +38,6 @@ export function HotelListItem({ name, city, country, priceLevel, coverPhoto, onP
           <PriceLevel level={priceLevel} size="small" />
         </View>
       )}
-      <Ionicons name="chevron-forward" size={18} color={Colors.textLight} />
     </TouchableOpacity>
   );
 }
@@ -46,18 +46,15 @@ const styles = StyleSheet.create({
   container: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    backgroundColor: Colors.white,
-    borderBottomWidth: 1,
-    borderBottomColor: Colors.borderLight,
+    paddingVertical: 14,
+    backgroundColor: 'transparent',
   },
   imageBox: {
     width: 48,
     height: 48,
     borderRadius: Layout.borderRadiusSmall,
     overflow: 'hidden',
-    marginRight: 12,
+    marginRight: 14,
   },
   image: {
     width: '100%',
@@ -74,16 +71,17 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   name: {
-    fontSize: 15,
+    fontSize: Typography.body.fontSize,
     fontWeight: '600',
+    fontFamily: Typography.heading3.fontFamily,
     color: Colors.text,
     marginBottom: 2,
   },
   location: {
-    fontSize: 13,
+    fontSize: Typography.caption.fontSize,
     color: Colors.textSecondary,
   },
   priceContainer: {
-    marginRight: 8,
+    marginLeft: 8,
   },
 });

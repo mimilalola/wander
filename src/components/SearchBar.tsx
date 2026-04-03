@@ -25,7 +25,7 @@ export function SearchBar({
 
   return (
     <Container onPress={onPress} activeOpacity={0.7} style={styles.container}>
-      <Ionicons name="search" size={20} color={Colors.textLight} style={styles.icon} />
+      <Ionicons name="search" size={18} color={Colors.textLight} style={styles.icon} />
       <TextInput
         style={styles.input}
         value={value}
@@ -44,12 +44,10 @@ const styles = StyleSheet.create({
   container: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: Colors.white,
+    backgroundColor: Colors.borderLight,
     borderRadius: Layout.borderRadius,
     paddingHorizontal: 14,
-    height: 48,
-    borderWidth: 1,
-    borderColor: Colors.border,
+    height: 44,
   },
   icon: {
     marginRight: 10,

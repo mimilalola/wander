@@ -10,7 +10,7 @@ interface StatusBadgeProps {
 export function StatusBadge({ status }: StatusBadgeProps) {
   const isWant = status === 'want';
   return (
-    <View style={[styles.badge, isWant ? styles.want : styles.been]}>
+    <View style={[styles.badge, isWant ? styles.saved : styles.slept]}>
       <Text style={styles.text}>{isWant ? 'Saved' : 'Slept'}</Text>
     </View>
   );
@@ -22,11 +22,11 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
     borderRadius: 12,
   },
-  want: {
-    backgroundColor: Colors.want + '20',
+  saved: {
+    backgroundColor: Colors.saved + '20',
   },
-  been: {
-    backgroundColor: Colors.been + '20',
+  slept: {
+    backgroundColor: Colors.slept + '20',
   },
   text: {
     fontSize: 12,

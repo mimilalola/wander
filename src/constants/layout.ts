@@ -1,15 +1,30 @@
 export const Layout = {
-  padding: 16,
-  paddingSmall: 8,
-  paddingLarge: 24,
-  borderRadius: 12,
-  borderRadiusSmall: 8,
-  borderRadiusLarge: 16,
-  cardShadow: {
+  // Base spacing
+  padding: 20,
+  paddingSmall: 12,
+  paddingLarge: 32,
+
+  // Section spacing (THIS is what you were missing)
+  sectionSpacing: 40,
+  sectionSpacingSmall: 24,
+
+  // Gaps between elements
+  gap: 16,
+  gapSmall: 12,
+
+  // Borders / radius
+  borderRadius: 8,
+  borderRadiusSmall: 6,
+  borderRadiusLarge: 12,
+
+  // Shadows (remove heavy cards completely)
+  cardShadow: {},
+
+  // Optional ultra-subtle shadow (only if needed)
+  subtleShadow: {
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.08,
-    shadowRadius: 8,
-    elevation: 3,
+    shadowOpacity: 0.04,
+    shadowRadius: 6,
+    elevation: 1,
   },
 };

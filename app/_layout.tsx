@@ -12,21 +12,34 @@ export default function RootLayout() {
           headerShown: false,
           contentStyle: { backgroundColor: '#fafafa' },
           animation: 'slide_from_right',
+          gestureEnabled: true,
         }}
       >
         <Stack.Screen name="(tabs)" />
         <Stack.Screen
           name="search"
-          options={{ animation: 'slide_from_bottom', presentation: 'modal' }}
+          options={{
+            animation: 'slide_from_bottom',
+            presentation: 'modal',
+            gestureEnabled: true,
+          }}
         />
         <Stack.Screen
           name="add-hotel"
-          options={{ animation: 'slide_from_bottom', presentation: 'modal' }}
+          options={{
+            animation: 'slide_from_bottom',
+            presentation: 'modal',
+            gestureEnabled: true,
+          }}
         />
         <Stack.Screen name="hotel/[id]" />
         <Stack.Screen
           name="rating/[hotelId]"
-          options={{ animation: 'slide_from_bottom', presentation: 'fullScreenModal' }}
+          options={{
+            animation: 'slide_from_bottom',
+            presentation: 'fullScreenModal',
+            gestureEnabled: false,
+          }}
         />
       </Stack>
     </SQLiteProvider>

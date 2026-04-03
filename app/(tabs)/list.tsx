@@ -70,8 +70,8 @@ export default function ListScreen() {
   );
 
   const filtered = hotels.filter((h) => {
-    if (filter === 'Want') return h.saveStatus === 'want';
-    if (filter === 'Been') return h.saveStatus === 'been';
+    if (filter === 'Saved') return h.saveStatus === 'saved';
+    if (filter === 'Slept') return h.saveStatus === 'slept';
     return true;
   });
 
@@ -85,7 +85,7 @@ export default function ListScreen() {
 
         <View style={styles.segmentContainer}>
           <SegmentControl
-            options={['All', 'Want', 'Been']}
+            options={['All', 'Saved', 'Slept']}
             selected={filter}
             onChange={setFilter}
           />
@@ -111,9 +111,9 @@ export default function ListScreen() {
             <EmptyState
               icon="bookmark-outline"
               message={
-                filter === 'Want'
+                filter === 'Saved'
                   ? 'No hotels on your wishlist yet'
-                  : filter === 'Been'
+                  : filter === 'Slept'
                   ? "You haven't marked any hotels as visited"
                   : 'Start saving hotels to build your list'
               }

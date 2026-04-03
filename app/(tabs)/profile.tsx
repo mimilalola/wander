@@ -76,7 +76,7 @@ export default function ProfileScreen() {
         <View style={styles.statsGrid}>
           <View style={styles.statItem}>
             <Text style={styles.statNumber}>{stats?.hotelsWanted ?? 0}</Text>
-            <Text style={styles.statLabel}>Wishlist</Text>
+            <Text style={styles.statLabel}>Saved</Text>
           </View>
           <View style={styles.statDivider} />
           <View style={styles.statItem}>

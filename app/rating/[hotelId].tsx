@@ -8,7 +8,6 @@ import {
   TextInput,
   ScrollView,
   Image,
-  Alert,
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSQLiteContext } from 'expo-sqlite';
@@ -16,16 +15,27 @@ import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import { Colors } from '../../src/constants/colors';
 import { Layout } from '../../src/constants/layout';
-import { RatingSlider } from '../../src/components/RatingSlider';
-import { ComparisonCard } from '../../src/components/ComparisonCard';
+import { Typography } from '../../src/constants/typography';
+import { TagChip } from '../../src/components/TagChip';
+import { NightsPicker } from '../../src/components/NightsPicker';
+import { EmotionPicker } from '../../src/components/EmotionPicker';
+import { TextComparison } from '../../src/components/TextComparison';
+import { RatingStamp } from '../../src/components/RatingStamp';
 import { createDb } from '../../src/db/client';
-import { getHotelById } from '../../src/dal/hotels';
+import { getHotelById, getAllTags, addTagsToHotel, getHotelTags } from '../../src/dal/hotels';
 import { toggleSave } from '../../src/dal/saves';
-import { createVisit, getComparisonCandidates, updateVisitRank } from '../../src/dal/visits';
+import {
+  createVisit,
+  getComparisonCandidates,
+  updateVisitRank,
+  updateVisitRating,
+  getVisitsByTier,
+} from '../../src/dal/visits';
 import { addPhotos } from '../../src/dal/photos';
-import { calculateElo } from '../../src/utils/ranking';
+import { calculateElo, computeTierScore } from '../../src/utils/ranking';
+import type { EmotionTier } from '../../src/types';
 
-type Step = 'rate' | 'compare' | 'notes' | 'photos' | 'confirm';
+type Step = 'tags' | 'nights' | 'emotion' | 'compare' | 'confirm';
 
 interface CompCandidate {
   visit: { id: number; rating: number | null; rank: number | null };
@@ -38,63 +48,121 @@ export default function RatingScreen() {
   const sqlite = useSQLiteContext();
   const db = createDb(sqlite);
 
-  const [step, setStep] = useState<Step>('rate');
+  const [step, setStep] = useState<Step>('tags');
   const [hotelName, setHotelName] = useState('');
-  const [rating, setRating] = useState<number | null>(null);
-  const [notes, setNotes] = useState('');
-  const [photoUris, setPhotoUris] = useState<string[]>([]);
+
+  // Tags step
+  const [allTags, setAllTags] = useState<{ id: number; name: string }[]>([]);
+  const [selectedTags, setSelectedTags] = useState<string[]>([]);
+  const [existingTags, setExistingTags] = useState<string[]>([]);
+
+  // Nights step
+  const [nights, setNights] = useState<number | null>(null);
+
+  // Emotion step
+  const [emotion, setEmotion] = useState<EmotionTier | null>(null);
+
+  // Compare step
   const [comparisons, setComparisons] = useState<CompCandidate[]>([]);
   const [compIndex, setCompIndex] = useState(0);
   const [newVisitId, setNewVisitId] = useState<number | null>(null);
   const [newVisitRank, setNewVisitRank] = useState(1500);
+
+  // Photos (collected during confirm)
+  const [photoUris, setPhotoUris] = useState<string[]>([]);
+  const [notes, setNotes] = useState('');
+
+  // Derived score
+  const [derivedScore, setDerivedScore] = useState<number | null>(null);
 
   useEffect(() => {
     if (!hotelId) return;
     (async () => {
       const hotel = await getHotelById(db, parseInt(hotelId));
       if (hotel) setHotelName(hotel.name);
+      const tags = await getAllTags(db);
+      setAllTags(tags);
+      const existing = await getHotelTags(db, parseInt(hotelId));
+      setExistingTags(existing);
+      setSelectedTags(existing);
     })();
-  }, [hotelId, db]);
+  }, [hotelId]);
 
-  const loadComparisons = useCallback(async () => {
-    if (!hotelId) return;
-    const candidates = await getComparisonCandidates(db, 1, parseInt(hotelId));
-    setComparisons(candidates as CompCandidate[]);
-  }, [hotelId, db]);
+  const toggleTag = (name: string) => {
+    setSelectedTags((prev) =>
+      prev.includes(name) ? prev.filter((t) => t !== name) : [...prev, name]
+    );
+  };
+
+  const createVisitAndCompare = async () => {
+    if (!emotion) return;
+
+    // Create visit
+    const visit = await createVisit(db, {
+      userId: 1,
+      hotelId: parseInt(hotelId!),
+      emotion,
+      nights,
+    });
+    setNewVisitId(visit.id);
+
+    // Mark as 'been'
+    await toggleSave(db, 1, parseInt(hotelId!), 'been');
+
+    // Save tags
+    const newTags = selectedTags.filter((t) => !existingTags.includes(t));
+    if (newTags.length > 0) {
+      await addTagsToHotel(db, parseInt(hotelId!), newTags);
+    }
+
+    // Load comparisons filtered by emotion tier
+    const candidates = await getComparisonCandidates(db, 1, parseInt(hotelId!), emotion);
+
+    if (emotion === 'wouldnt_return') {
+      // Allow 1-2 comparisons for wouldnt_return
+      setComparisons((candidates as CompCandidate[]).slice(0, 2));
+    } else {
+      setComparisons(candidates as CompCandidate[]);
+    }
+
+    return { visitId: visit.id, candidates: candidates as CompCandidate[] };
+  };
+
+  const computeAndSetScore = async (visitId: number, rank: number, emotionTier: EmotionTier) => {
+    const tierVisits = await getVisitsByTier(db, 1, emotionTier);
+    const allRanks = tierVisits.map((v) => ({ rank: v.rank }));
+    // Include the new visit's rank
+    const withNew = [...allRanks.filter((v) => v.rank !== rank), { rank }];
+    const score = computeTierScore(rank, withNew, emotionTier);
+    setDerivedScore(score);
+    await updateVisitRating(db, visitId, Math.round(score));
+    return score;
+  };
 
   const handleNext = async () => {
     switch (step) {
-      case 'rate':
-        if (rating === null) {
-          Alert.alert('Rate this hotel', 'Please select a rating from 1 to 10');
-          return;
-        }
-        // Create the visit record now
-        const visit = await createVisit(db, {
-          userId: 1,
-          hotelId: parseInt(hotelId!),
-          rating,
-          notes: null,
-        });
-        setNewVisitId(visit.id);
-        // Mark as been
-        await toggleSave(db, 1, parseInt(hotelId!), 'been');
-        // Load comparisons and go to compare or notes
-        const candidates = await getComparisonCandidates(db, 1, parseInt(hotelId!));
-        setComparisons(candidates as CompCandidate[]);
-        if (candidates.length > 0) {
+      case 'tags':
+        setStep('nights');
+        break;
+      case 'nights':
+        setStep('emotion');
+        break;
+      case 'emotion': {
+        if (!emotion) return;
+        const result = await createVisitAndCompare();
+        if (result && result.candidates.length > 0) {
           setStep('compare');
-        } else {
-          setStep('notes');
+        } else if (result) {
+          await computeAndSetScore(result.visitId, newVisitRank, emotion);
+          setStep('confirm');
         }
         break;
+      }
       case 'compare':
-        setStep('notes');
-        break;
-      case 'notes':
-        setStep('photos');
-        break;
-      case 'photos':
+        // Done comparing — compute score
+        if (newVisitId && emotion) {
+          await computeAndSetScore(newVisitId, newVisitRank, emotion);
+        }
         setStep('confirm');
         break;
       case 'confirm':
@@ -103,30 +171,37 @@ export default function RatingScreen() {
     }
   };
 
-  const handleComparison = async (winnerId: number, loserId: number) => {
+  const handleComparison = async (winner: 'a' | 'b') => {
     if (!newVisitId) return;
+    const current = comparisons[compIndex];
+    if (!current) return;
 
-    const winnerComp = comparisons.find((c) => c.hotel.id === winnerId);
-    const isNewHotelWinner = winnerId === parseInt(hotelId!);
-
-    const winnerRank = isNewHotelWinner ? newVisitRank : (winnerComp?.visit.rank ?? 1500);
-    const loserRank = isNewHotelWinner ? (comparisons[compIndex]?.visit.rank ?? 1500) : newVisitRank;
+    const isNewWinner = winner === 'a';
+    const winnerRank = isNewWinner ? newVisitRank : (current.visit.rank ?? 1500);
+    const loserRank = isNewWinner ? (current.visit.rank ?? 1500) : newVisitRank;
 
     const { newWinnerRank, newLoserRank } = calculateElo(winnerRank, loserRank);
 
-    if (isNewHotelWinner) {
+    if (isNewWinner) {
       setNewVisitRank(newWinnerRank);
-      const loserVisitId = comparisons[compIndex]?.visit.id;
-      if (loserVisitId) await updateVisitRank(db, loserVisitId, newLoserRank);
+      await updateVisitRank(db, current.visit.id, newLoserRank);
     } else {
       setNewVisitRank(newLoserRank);
-      if (winnerComp) await updateVisitRank(db, winnerComp.visit.id, newWinnerRank);
+      await updateVisitRank(db, current.visit.id, newWinnerRank);
     }
+
+    // Update the new visit rank in DB
+    await updateVisitRank(db, newVisitId, isNewWinner ? newWinnerRank : newLoserRank);
 
     if (compIndex < comparisons.length - 1) {
       setCompIndex(compIndex + 1);
     } else {
-      setStep('notes');
+      // Done with comparisons
+      const finalRank = isNewWinner ? newWinnerRank : newLoserRank;
+      if (emotion) {
+        await computeAndSetScore(newVisitId, finalRank, emotion);
+      }
+      setStep('confirm');
     }
   };
 
@@ -136,7 +211,6 @@ export default function RatingScreen() {
       allowsMultipleSelection: true,
       quality: 0.8,
     });
-
     if (!result.canceled) {
       setPhotoUris((prev) => [...prev, ...result.assets.map((a) => a.uri)]);
     }
@@ -145,11 +219,13 @@ export default function RatingScreen() {
   const handleSave = async () => {
     if (!newVisitId) return;
 
-    // Update notes and rank on the visit
-    await sqlite.runAsync(
-      `UPDATE visits SET notes = ?, rank = ? WHERE id = ?`,
-      [notes || null, newVisitRank, newVisitId]
-    );
+    // Update notes
+    if (notes) {
+      await sqlite.runAsync(
+        `UPDATE visits SET notes = ? WHERE id = ?`,
+        [notes, newVisitId]
+      );
+    }
 
     // Save photos
     if (photoUris.length > 0) {
@@ -161,149 +237,163 @@ export default function RatingScreen() {
 
   const handleSkip = () => {
     switch (step) {
+      case 'tags':
+        setStep('nights');
+        break;
+      case 'nights':
+        setStep('emotion');
+        break;
       case 'compare':
-        setStep('notes');
-        break;
-      case 'notes':
-        setStep('photos');
-        break;
-      case 'photos':
-        setStep('confirm');
+        handleNext();
         break;
     }
   };
+
+  const STEPS: Step[] = ['tags', 'nights', 'emotion', 'compare', 'confirm'];
+  const stepIndex = STEPS.indexOf(step);
 
   const currentComparison = comparisons[compIndex];
 
   return (
     <SafeAreaView style={styles.safe}>
+      {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity onPress={() => router.back()} style={styles.closeButton}>
-          <Ionicons name="close" size={24} color={Colors.text} />
+          <Ionicons name="close" size={22} color={Colors.text} />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>{hotelName}</Text>
         <View style={styles.stepIndicator}>
-          {['rate', 'compare', 'notes', 'photos', 'confirm'].map((s, i) => (
+          {STEPS.map((s, i) => (
             <View
               key={s}
               style={[
-                styles.stepDot,
-                step === s && styles.stepDotActive,
-                ['rate', 'compare', 'notes', 'photos', 'confirm'].indexOf(step) > i && styles.stepDotDone,
+                styles.stepLine,
+                i <= stepIndex && styles.stepLineActive,
               ]}
             />
           ))}
         </View>
       </View>
 
-      <ScrollView style={styles.content} contentContainerStyle={styles.contentInner}>
-        {step === 'rate' && (
+      <ScrollView
+        style={styles.content}
+        contentContainerStyle={styles.contentInner}
+        showsVerticalScrollIndicator={false}
+      >
+        {/* Tags */}
+        {step === 'tags' && (
           <View>
-            <Text style={styles.stepTitle}>Rate your stay</Text>
-            <Text style={styles.stepSubtitle}>How was {hotelName}?</Text>
-            {rating !== null && (
-              <View style={styles.bigRating}>
-                <Text style={styles.bigRatingText}>{rating}</Text>
-              </View>
-            )}
-            <RatingSlider value={rating} onChange={setRating} />
+            <Text style={styles.editorialLabel}>WHAT DEFINED THIS PLACE?</Text>
+            <Text style={styles.stepTitle}>Select tags</Text>
+            <View style={styles.tagsWrap}>
+              {allTags.map((tag) => (
+                <TagChip
+                  key={tag.id}
+                  name={tag.name}
+                  selected={selectedTags.includes(tag.name)}
+                  onPress={() => toggleTag(tag.name)}
+                />
+              ))}
+            </View>
           </View>
         )}
 
+        {/* Nights */}
+        {step === 'nights' && (
+          <View>
+            <Text style={styles.editorialLabel}>YOUR STAY</Text>
+            <Text style={styles.stepTitle}>How many nights?</Text>
+            <View style={styles.pickerContainer}>
+              <NightsPicker selected={nights} onSelect={setNights} />
+            </View>
+          </View>
+        )}
+
+        {/* Emotion */}
+        {step === 'emotion' && (
+          <View>
+            <Text style={styles.editorialLabel}>YOUR FEELING</Text>
+            <Text style={styles.stepTitle}>How do you feel about it?</Text>
+            <EmotionPicker selected={emotion} onSelect={setEmotion} />
+          </View>
+        )}
+
+        {/* Compare */}
         {step === 'compare' && currentComparison && (
           <View>
-            <Text style={styles.stepTitle}>Compare</Text>
-            <Text style={styles.stepSubtitle}>
-              {compIndex + 1} of {comparisons.length}
+            <Text style={styles.editorialLabel}>
+              COMPARE {compIndex + 1} OF {comparisons.length}
             </Text>
-            <ComparisonCard
-              hotelA={{
-                id: parseInt(hotelId!),
-                name: hotelName,
-                city: '',
-                country: '',
-                rating,
-              }}
-              hotelB={{
-                id: currentComparison.hotel.id,
-                name: currentComparison.hotel.name,
-                city: currentComparison.hotel.city,
-                country: currentComparison.hotel.country,
-                rating: currentComparison.visit.rating,
-              }}
-              onSelectA={() => handleComparison(parseInt(hotelId!), currentComparison.hotel.id)}
-              onSelectB={() => handleComparison(currentComparison.hotel.id, parseInt(hotelId!))}
+            <TextComparison
+              hotelA={hotelName}
+              hotelB={currentComparison.hotel.name}
+              onChoose={handleComparison}
             />
           </View>
         )}
 
-        {step === 'notes' && (
-          <View>
-            <Text style={styles.stepTitle}>Add notes</Text>
-            <Text style={styles.stepSubtitle}>What made this stay special?</Text>
+        {/* Confirm */}
+        {step === 'confirm' && (
+          <View style={styles.confirmContainer}>
+            <Text style={styles.editorialLabel}>YOUR SCORE</Text>
+            <View style={styles.stampCenter}>
+              <RatingStamp score={derivedScore} size="large" />
+            </View>
+            {derivedScore !== null && (
+              <Text style={styles.scoreText}>{derivedScore.toFixed(1)} / 10</Text>
+            )}
+            <Text style={styles.hotelNameConfirm}>{hotelName}</Text>
+
+            {/* Notes */}
             <TextInput
               style={styles.notesInput}
               multiline
-              placeholder="Great rooftop bar, amazing breakfast, beautiful views..."
+              placeholder="Add a note about your stay..."
               placeholderTextColor={Colors.textLight}
               value={notes}
               onChangeText={setNotes}
               textAlignVertical="top"
             />
-          </View>
-        )}
 
-        {step === 'photos' && (
-          <View>
-            <Text style={styles.stepTitle}>Add photos</Text>
-            <Text style={styles.stepSubtitle}>Share memories from your stay</Text>
-            <View style={styles.photosGrid}>
-              {photoUris.map((uri, i) => (
-                <View key={i} style={styles.photoThumb}>
-                  <Image source={{ uri }} style={styles.photoImage} />
-                  <TouchableOpacity
-                    style={styles.removePhoto}
-                    onPress={() => setPhotoUris((prev) => prev.filter((_, j) => j !== i))}
-                  >
-                    <Ionicons name="close-circle" size={22} color={Colors.accent} />
-                  </TouchableOpacity>
-                </View>
-              ))}
-              <TouchableOpacity style={styles.addPhotoButton} onPress={handlePickPhotos}>
-                <Ionicons name="camera-outline" size={28} color={Colors.textSecondary} />
-                <Text style={styles.addPhotoText}>Add</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        )}
-
-        {step === 'confirm' && (
-          <View>
-            <Text style={styles.stepTitle}>All set!</Text>
-            <View style={styles.summaryCard}>
-              <Text style={styles.summaryHotel}>{hotelName}</Text>
-              {rating !== null && (
-                <View style={styles.summaryRating}>
-                  <Text style={styles.summaryRatingNum}>{rating}</Text>
-                  <Text style={styles.summaryRatingMax}>/10</Text>
-                </View>
-              )}
-              {notes ? <Text style={styles.summaryNotes}>{notes}</Text> : null}
-              <Text style={styles.summaryPhotos}>
-                {photoUris.length} photo{photoUris.length !== 1 ? 's' : ''}
-              </Text>
+            {/* Photos */}
+            <View style={styles.photosSection}>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                {photoUris.map((uri, i) => (
+                  <View key={i} style={styles.photoThumb}>
+                    <Image source={{ uri }} style={styles.photoImage} />
+                    <TouchableOpacity
+                      style={styles.removePhoto}
+                      onPress={() => setPhotoUris((prev) => prev.filter((_, j) => j !== i))}
+                    >
+                      <Ionicons name="close-circle" size={20} color={Colors.accent} />
+                    </TouchableOpacity>
+                  </View>
+                ))}
+                <TouchableOpacity style={styles.addPhotoButton} onPress={handlePickPhotos}>
+                  <Ionicons name="camera-outline" size={22} color={Colors.textSecondary} />
+                </TouchableOpacity>
+              </ScrollView>
             </View>
           </View>
         )}
       </ScrollView>
 
+      {/* Footer */}
       <View style={styles.footer}>
-        {step !== 'rate' && step !== 'confirm' && (
+        {step !== 'emotion' && step !== 'confirm' && (
           <TouchableOpacity style={styles.skipButton} onPress={handleSkip} activeOpacity={0.7}>
             <Text style={styles.skipText}>Skip</Text>
           </TouchableOpacity>
         )}
-        <TouchableOpacity style={styles.nextButton} onPress={handleNext} activeOpacity={0.7}>
+        <TouchableOpacity
+          style={[
+            styles.nextButton,
+            step === 'emotion' && !emotion && styles.nextButtonDisabled,
+          ]}
+          onPress={handleNext}
+          activeOpacity={0.7}
+          disabled={step === 'emotion' && !emotion}
+        >
           <Text style={styles.nextText}>
             {step === 'confirm' ? 'Save Visit' : 'Next'}
           </Text>
@@ -322,9 +412,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: Layout.padding,
     paddingTop: 12,
     paddingBottom: 16,
-    backgroundColor: Colors.white,
-    borderBottomWidth: 1,
-    borderBottomColor: Colors.border,
     alignItems: 'center',
   },
   closeButton: {
@@ -334,74 +421,85 @@ const styles = StyleSheet.create({
     padding: 4,
   },
   headerTitle: {
-    fontSize: 16,
-    fontWeight: '600',
+    ...Typography.captionBold,
     color: Colors.text,
   },
   stepIndicator: {
     flexDirection: 'row',
-    gap: 6,
-    marginTop: 12,
+    gap: 4,
+    marginTop: 14,
+    width: '100%',
   },
-  stepDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
+  stepLine: {
+    flex: 1,
+    height: 2,
     backgroundColor: Colors.borderLight,
+    borderRadius: 1,
   },
-  stepDotActive: {
-    backgroundColor: Colors.accent,
-    width: 20,
-  },
-  stepDotDone: {
+  stepLineActive: {
     backgroundColor: Colors.accent,
   },
   content: {
     flex: 1,
   },
   contentInner: {
-    padding: Layout.paddingLarge,
+    padding: Layout.padding,
+    paddingTop: 8,
   },
-  stepTitle: {
-    fontSize: 24,
-    fontWeight: '700',
-    color: Colors.text,
+  editorialLabel: {
+    ...Typography.editorial,
+    color: Colors.textSecondary,
     marginBottom: 8,
   },
-  stepSubtitle: {
-    fontSize: 15,
-    color: Colors.textSecondary,
-    marginBottom: 24,
-  },
-  bigRating: {
-    alignSelf: 'center',
-    marginBottom: 24,
-  },
-  bigRatingText: {
-    fontSize: 64,
-    fontWeight: '700',
-    color: Colors.accent,
-  },
-  notesInput: {
-    backgroundColor: Colors.white,
-    borderRadius: Layout.borderRadius,
-    padding: 16,
-    fontSize: 15,
+  stepTitle: {
+    ...Typography.heading2,
     color: Colors.text,
-    minHeight: 120,
-    borderWidth: 1,
-    borderColor: Colors.border,
+    marginBottom: 24,
   },
-  photosGrid: {
+  tagsWrap: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 8,
+  },
+  pickerContainer: {
+    paddingTop: 8,
+  },
+  confirmContainer: {
+    alignItems: 'center',
+  },
+  stampCenter: {
+    marginVertical: 20,
+  },
+  scoreText: {
+    ...Typography.heading3,
+    color: Colors.accent,
+    marginBottom: 4,
+  },
+  hotelNameConfirm: {
+    ...Typography.heading2,
+    color: Colors.text,
+    textAlign: 'center',
+    marginBottom: 24,
+  },
+  notesInput: {
+    width: '100%',
+    borderRadius: Layout.borderRadius,
+    padding: 16,
+    fontSize: Typography.body.fontSize,
+    color: Colors.text,
+    minHeight: 80,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    marginBottom: 20,
+  },
+  photosSection: {
+    width: '100%',
   },
   photoThumb: {
-    width: 100,
-    height: 100,
+    width: 80,
+    height: 80,
     borderRadius: Layout.borderRadiusSmall,
     overflow: 'hidden',
+    marginRight: 8,
     position: 'relative',
   },
   photoImage: {
@@ -410,80 +508,33 @@ const styles = StyleSheet.create({
   },
   removePhoto: {
     position: 'absolute',
-    top: 4,
-    right: 4,
+    top: 2,
+    right: 2,
   },
   addPhotoButton: {
-    width: 100,
-    height: 100,
+    width: 80,
+    height: 80,
     borderRadius: Layout.borderRadiusSmall,
-    backgroundColor: Colors.borderLight,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    borderStyle: 'dashed',
     justifyContent: 'center',
     alignItems: 'center',
-  },
-  addPhotoText: {
-    fontSize: 12,
-    color: Colors.textSecondary,
-    marginTop: 4,
-  },
-  summaryCard: {
-    backgroundColor: Colors.white,
-    borderRadius: Layout.borderRadius,
-    padding: 24,
-    alignItems: 'center',
-    ...Layout.subtleShadow,
-  },
-  summaryHotel: {
-    fontSize: 20,
-    fontWeight: '700',
-    color: Colors.text,
-    marginBottom: 12,
-  },
-  summaryRating: {
-    flexDirection: 'row',
-    alignItems: 'baseline',
-    marginBottom: 12,
-  },
-  summaryRatingNum: {
-    fontSize: 48,
-    fontWeight: '700',
-    color: Colors.accent,
-  },
-  summaryRatingMax: {
-    fontSize: 20,
-    color: Colors.textSecondary,
-    marginLeft: 2,
-  },
-  summaryNotes: {
-    fontSize: 14,
-    color: Colors.textSecondary,
-    textAlign: 'center',
-    marginBottom: 8,
-  },
-  summaryPhotos: {
-    fontSize: 13,
-    color: Colors.textLight,
   },
   footer: {
     flexDirection: 'row',
     paddingHorizontal: Layout.padding,
     paddingVertical: 16,
-    backgroundColor: Colors.white,
-    borderTopWidth: 1,
-    borderTopColor: Colors.border,
     gap: 12,
   },
   skipButton: {
-    paddingHorizontal: 24,
+    paddingHorizontal: 20,
     paddingVertical: 14,
-    borderRadius: Layout.borderRadius,
-    borderWidth: 1.5,
-    borderColor: Colors.border,
     justifyContent: 'center',
   },
   skipText: {
-    fontSize: 15,
-    fontWeight: '600',
+    fontSize: Typography.body.fontSize,
+    fontWeight: '500',
     color: Colors.textSecondary,
   },
   nextButton: {
@@ -493,8 +544,11 @@ const styles = StyleSheet.create({
     borderRadius: Layout.borderRadius,
     alignItems: 'center',
   },
+  nextButtonDisabled: {
+    opacity: 0.4,
+  },
   nextText: {
-    fontSize: 15,
+    fontSize: Typography.body.fontSize,
     fontWeight: '600',
     color: Colors.white,
   },

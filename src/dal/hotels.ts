@@ -86,6 +86,19 @@ export async function getHotelWithDetails(db: Database, hotelId: number, userId:
   };
 }
 
+export async function getAllTags(db: Database) {
+  return db.select().from(schema.tags).orderBy(schema.tags.name);
+}
+
+export async function getHotelTags(db: Database, hotelId: number) {
+  const rows = await db
+    .select({ name: schema.tags.name })
+    .from(schema.hotelTags)
+    .innerJoin(schema.tags, eq(schema.hotelTags.tagId, schema.tags.id))
+    .where(eq(schema.hotelTags.hotelId, hotelId));
+  return rows.map((r) => r.name);
+}
+
 export async function addTagsToHotel(db: Database, hotelId: number, tagNames: string[]) {
   for (const name of tagNames) {
     const existing = await db.select().from(schema.tags).where(eq(schema.tags.name, name)).limit(1);

@@ -10,7 +10,7 @@ export default function TabLayout() {
         tabBarActiveTintColor: Colors.accent,
         tabBarInactiveTintColor: Colors.textLight,
         tabBarStyle: {
-          backgroundColor: Colors.white,
+          backgroundColor: Colors.background,
           borderTopColor: Colors.borderLight,
           borderTopWidth: 1,
           height: 85,
@@ -19,25 +19,25 @@ export default function TabLayout() {
         },
         tabBarLabelStyle: {
           fontSize: 11,
-          fontWeight: '600',
+          fontWeight: '500',
         },
       }}
     >
       <Tabs.Screen
         name="index"
         options={{
-          title: 'Home',
+          title: 'Reception',
           tabBarIcon: ({ color, size }) => (
-            <Ionicons name="home-outline" size={size} color={color} />
+            <Ionicons name="key-outline" size={size} color={color} />
           ),
         }}
       />
       <Tabs.Screen
         name="list"
         options={{
-          title: 'My Hotels',
+          title: 'My List',
           tabBarIcon: ({ color, size }) => (
-            <Ionicons name="bookmark-outline" size={size} color={color} />
+            <Ionicons name="list-outline" size={size} color={color} />
           ),
         }}
       />

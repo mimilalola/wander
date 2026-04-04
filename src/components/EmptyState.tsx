@@ -2,6 +2,7 @@ import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors } from '../constants/colors';
+import { Layout } from '../constants/layout';
 
 interface EmptyStateProps {
   icon?: keyof typeof Ionicons.glyphMap;
@@ -13,7 +14,7 @@ interface EmptyStateProps {
 export function EmptyState({ icon = 'bed-outline', message, actionLabel, onAction }: EmptyStateProps) {
   return (
     <View style={styles.container}>
-      <Ionicons name={icon} size={48} color={Colors.textLight} />
+      <Ionicons name={icon} size={40} color={Colors.textLight} />
       <Text style={styles.message}>{message}</Text>
       {actionLabel && onAction && (
         <TouchableOpacity style={styles.button} onPress={onAction} activeOpacity={0.7}>
@@ -44,7 +45,7 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.accent,
     paddingHorizontal: 24,
     paddingVertical: 12,
-    borderRadius: 24,
+    borderRadius: Layout.borderRadius,
   },
   buttonText: {
     color: Colors.white,

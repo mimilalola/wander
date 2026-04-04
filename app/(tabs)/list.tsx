@@ -1,34 +1,37 @@
 import React, { useState, useCallback } from 'react';
-import { View, Text, StyleSheet, FlatList, SafeAreaView } from 'react-native';
+import { View, Text, StyleSheet, FlatList, SafeAreaView, TouchableOpacity } from 'react-native';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { useSQLiteContext } from 'expo-sqlite';
+import { Ionicons } from '@expo/vector-icons';
 import { eq, sql, desc } from 'drizzle-orm';
-import { HotelCard } from '../../src/components/HotelCard';
 import { SegmentControl } from '../../src/components/SegmentControl';
+import { RatingStamp } from '../../src/components/RatingStamp';
 import { EmptyState } from '../../src/components/EmptyState';
 import { Colors } from '../../src/constants/colors';
 import { Layout } from '../../src/constants/layout';
+import { Typography } from '../../src/constants/typography';
 import { createDb } from '../../src/db/client';
 import * as schema from '../../src/db/schema';
-import type { SaveStatus } from '../../src/types';
+import { formatEmotion } from '../../src/utils/format';
+import type { SaveStatus, EmotionTier } from '../../src/types';
 
-interface SavedHotel {
+interface ListHotel {
   id: number;
   name: string;
   city: string;
   country: string;
-  priceLevel: number | null;
   coverPhoto: string | null;
   saveStatus: SaveStatus;
   rating: number | null;
+  emotion: EmotionTier | null;
 }
 
 export default function ListScreen() {
   const router = useRouter();
   const sqlite = useSQLiteContext();
   const db = createDb(sqlite);
-  const [filter, setFilter] = useState('All');
-  const [hotels, setHotels] = useState<SavedHotel[]>([]);
+  const [filter, setFilter] = useState('Slept');
+  const [hotels, setHotels] = useState<ListHotel[]>([]);
 
   const loadHotels = useCallback(async () => {
     const results = await db
@@ -37,7 +40,6 @@ export default function ListScreen() {
         name: schema.hotels.name,
         city: schema.hotels.city,
         country: schema.hotels.country,
-        priceLevel: schema.hotels.priceLevel,
         coverPhoto: schema.hotels.coverPhoto,
         saveStatus: schema.saves.status,
       })
@@ -46,21 +48,26 @@ export default function ListScreen() {
       .where(eq(schema.saves.userId, 1))
       .orderBy(desc(schema.saves.createdAt));
 
-    const withRatings: SavedHotel[] = [];
+    const withVisitData: ListHotel[] = [];
     for (const h of results) {
       const visit = await db
-        .select({ rating: schema.visits.rating })
+        .select({
+          rating: schema.visits.rating,
+          emotion: schema.visits.emotion,
+          rank: schema.visits.rank,
+        })
         .from(schema.visits)
         .where(sql`${schema.visits.userId} = 1 AND ${schema.visits.hotelId} = ${h.id}`)
         .orderBy(desc(schema.visits.createdAt))
         .limit(1);
-      withRatings.push({
+      withVisitData.push({
         ...h,
         saveStatus: h.saveStatus as SaveStatus,
         rating: visit[0]?.rating ?? null,
+        emotion: (visit[0]?.emotion as EmotionTier) ?? null,
       });
     }
-    setHotels(withRatings);
+    setHotels(withVisitData);
   }, []);
 
   useFocusEffect(
@@ -69,23 +76,56 @@ export default function ListScreen() {
     }, [loadHotels])
   );
 
-  const filtered = hotels.filter((h) => {
-    if (filter === 'Want') return h.saveStatus === 'want';
-    if (filter === 'Been') return h.saveStatus === 'been';
-    return true;
-  });
+  const sleptHotels = hotels
+    .filter((h) => h.saveStatus === 'been')
+    .sort((a, b) => (b.rating ?? 0) - (a.rating ?? 0));
+
+  const savedHotels = hotels.filter((h) => h.saveStatus === 'want');
+
+  const filtered = filter === 'Slept' ? sleptHotels : savedHotels;
+
+  const renderSleptItem = ({ item, index }: { item: ListHotel; index: number }) => (
+    <TouchableOpacity
+      style={styles.sleptItem}
+      onPress={() => router.push(`/hotel/${item.id}`)}
+      activeOpacity={0.7}
+    >
+      <Text style={styles.rank}>{index + 1}</Text>
+      <View style={styles.sleptInfo}>
+        <Text style={styles.hotelName} numberOfLines={1}>{item.name}</Text>
+        <Text style={styles.hotelLocation}>
+          {item.city}, {item.country}
+          {item.emotion ? ` \u00B7 ${formatEmotion(item.emotion)}` : ''}
+        </Text>
+      </View>
+      <RatingStamp score={item.rating} size="small" />
+    </TouchableOpacity>
+  );
+
+  const renderSavedItem = ({ item }: { item: ListHotel }) => (
+    <TouchableOpacity
+      style={styles.savedItem}
+      onPress={() => router.push(`/hotel/${item.id}`)}
+      activeOpacity={0.7}
+    >
+      <Ionicons name="star-outline" size={16} color={Colors.textSecondary} />
+      <View style={styles.savedInfo}>
+        <Text style={styles.hotelName} numberOfLines={1}>{item.name}</Text>
+        <Text style={styles.hotelLocation}>{item.city}, {item.country}</Text>
+      </View>
+    </TouchableOpacity>
+  );
 
   return (
     <SafeAreaView style={styles.safe}>
       <View style={styles.container}>
         <View style={styles.header}>
-          <Text style={styles.title}>My Hotels</Text>
-          <Text style={styles.count}>{filtered.length} hotels</Text>
+          <Text style={styles.title}>My List</Text>
         </View>
 
         <View style={styles.segmentContainer}>
           <SegmentControl
-            options={['All', 'Want', 'Been']}
+            options={['Slept', 'Saved']}
             selected={filter}
             onChange={setFilter}
           />
@@ -95,27 +135,14 @@ export default function ListScreen() {
           data={filtered}
           keyExtractor={(item) => item.id.toString()}
           contentContainerStyle={styles.listContent}
-          renderItem={({ item }) => (
-            <HotelCard
-              name={item.name}
-              city={item.city}
-              country={item.country}
-              priceLevel={item.priceLevel}
-              coverPhoto={item.coverPhoto}
-              saveStatus={item.saveStatus}
-              rating={item.rating}
-              onPress={() => router.push(`/hotel/${item.id}`)}
-            />
-          )}
+          renderItem={filter === 'Slept' ? renderSleptItem : renderSavedItem}
           ListEmptyComponent={
             <EmptyState
-              icon="bookmark-outline"
+              icon={filter === 'Slept' ? 'bed-outline' : 'star-outline'}
               message={
-                filter === 'Want'
-                  ? 'No hotels on your wishlist yet'
-                  : filter === 'Been'
-                  ? "You haven't marked any hotels as visited"
-                  : 'Start saving hotels to build your list'
+                filter === 'Slept'
+                  ? 'No hotels rated yet'
+                  : 'No hotels saved yet'
               }
               actionLabel="Search Hotels"
               onAction={() => router.push('/search')}
@@ -138,25 +165,53 @@ const styles = StyleSheet.create({
   header: {
     paddingHorizontal: Layout.padding,
     paddingTop: 12,
-    paddingBottom: 4,
+    paddingBottom: 8,
   },
   title: {
-    fontSize: 28,
-    fontWeight: '700',
+    ...Typography.heading1,
     color: Colors.text,
-    letterSpacing: -0.5,
-  },
-  count: {
-    fontSize: 14,
-    color: Colors.textSecondary,
-    marginTop: 2,
   },
   segmentContainer: {
     paddingHorizontal: Layout.padding,
-    paddingVertical: 12,
+    paddingBottom: 16,
   },
   listContent: {
     paddingHorizontal: Layout.padding,
     paddingBottom: 20,
+  },
+  sleptItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 14,
+    gap: 14,
+  },
+  rank: {
+    width: 24,
+    fontSize: Typography.body.fontSize,
+    fontWeight: '600',
+    color: Colors.textSecondary,
+    textAlign: 'center',
+  },
+  sleptInfo: {
+    flex: 1,
+  },
+  hotelName: {
+    ...Typography.bodyBold,
+    fontFamily: Typography.heading3.fontFamily,
+    color: Colors.text,
+  },
+  hotelLocation: {
+    fontSize: Typography.caption.fontSize,
+    color: Colors.textSecondary,
+    marginTop: 1,
+  },
+  savedItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 14,
+    gap: 12,
+  },
+  savedInfo: {
+    flex: 1,
   },
 });

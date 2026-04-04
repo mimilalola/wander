@@ -3,8 +3,10 @@ import { View, Text, StyleSheet, TouchableOpacity, Image } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors } from '../constants/colors';
 import { Layout } from '../constants/layout';
+import { Typography } from '../constants/typography';
 import { PriceLevel } from './PriceLevel';
 import { StatusBadge } from './StatusBadge';
+import { RatingStamp } from './RatingStamp';
 import type { SaveStatus } from '../types';
 
 interface HotelCardProps {
@@ -44,8 +46,8 @@ export function HotelCard({
           </View>
         )}
         {rating !== null && (
-          <View style={styles.ratingBadge}>
-            <Text style={styles.ratingText}>{rating}</Text>
+          <View style={styles.ratingContainer}>
+            <RatingStamp score={rating} size="small" />
           </View>
         )}
       </View>
@@ -66,19 +68,19 @@ export function HotelCard({
 
 const styles = StyleSheet.create({
   container: {
-    backgroundColor: Colors.white,
+    backgroundColor: Colors.background,
     borderRadius: Layout.borderRadius,
     overflow: 'hidden',
-    marginBottom: 12,
-    ...Layout.cardShadow,
+    marginBottom: 16,
   },
   imageContainer: {
-    height: 160,
+    height: 180,
     position: 'relative',
   },
   image: {
     width: '100%',
     height: '100%',
+    borderRadius: Layout.borderRadius,
   },
   placeholder: {
     width: '100%',
@@ -86,36 +88,28 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.borderLight,
     justifyContent: 'center',
     alignItems: 'center',
+    borderRadius: Layout.borderRadius,
   },
   badgeContainer: {
     position: 'absolute',
     top: 10,
     left: 10,
   },
-  ratingBadge: {
+  ratingContainer: {
     position: 'absolute',
     top: 10,
     right: 10,
-    backgroundColor: Colors.accent,
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  ratingText: {
-    color: Colors.white,
-    fontSize: 15,
-    fontWeight: '700',
   },
   info: {
-    padding: 12,
+    paddingVertical: 10,
+    paddingHorizontal: 2,
   },
   name: {
-    fontSize: 16,
+    fontSize: Typography.heading3.fontSize,
     fontWeight: '600',
+    fontFamily: Typography.heading3.fontFamily,
     color: Colors.text,
-    marginBottom: 4,
+    marginBottom: 2,
   },
   row: {
     flexDirection: 'row',
@@ -123,7 +117,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   location: {
-    fontSize: 13,
+    fontSize: Typography.caption.fontSize,
     color: Colors.textSecondary,
     flex: 1,
   },

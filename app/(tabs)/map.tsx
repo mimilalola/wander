@@ -128,7 +128,7 @@ export default function MapScreen() {
             <Marker
               key={hotel.id}
               coordinate={{ latitude: hotel.latitude, longitude: hotel.longitude }}
-              pinColor={hotel.saveStatus === 'been' ? Colors.been : Colors.want}
+              pinColor={hotel.saveStatus === 'been' ? Colors.slept : Colors.saved}
             >
               <Callout onPress={() => router.push(`/hotel/${hotel.id}`)}>
                 <View style={styles.callout}>
@@ -218,7 +218,7 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.white,
     padding: 16,
     borderRadius: Layout.borderRadiusSmall,
-    ...Layout.cardShadow,
+    ...Layout.subtleShadow,
   },
   hotelName: {
     fontSize: 15,

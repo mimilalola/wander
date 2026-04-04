@@ -14,14 +14,16 @@ import { useSQLiteContext } from 'expo-sqlite';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors } from '../../src/constants/colors';
 import { Layout } from '../../src/constants/layout';
+import { Typography } from '../../src/constants/typography';
 import { PriceLevel } from '../../src/components/PriceLevel';
 import { TagChip } from '../../src/components/TagChip';
-import { StatusBadge } from '../../src/components/StatusBadge';
+import { RatingStamp } from '../../src/components/RatingStamp';
 import { PhotoGrid } from '../../src/components/PhotoGrid';
 import { createDb } from '../../src/db/client';
 import { getHotelWithDetails } from '../../src/dal/hotels';
 import { toggleSave, removeSave } from '../../src/dal/saves';
-import { formatDate } from '../../src/utils/format';
+import { formatDate, formatEmotion, formatNights } from '../../src/utils/format';
+import type { EmotionTier } from '../../src/types';
 
 interface HotelDetails {
   id: number;
@@ -34,7 +36,15 @@ interface HotelDetails {
   coverPhoto: string | null;
   createdAt: string;
   save: { id: number; status: 'want' | 'been' } | null;
-  visits: { id: number; rating: number | null; notes: string | null; rank: number | null; createdAt: string }[];
+  visits: {
+    id: number;
+    rating: number | null;
+    notes: string | null;
+    rank: number | null;
+    emotion: EmotionTier | null;
+    nights: number | null;
+    createdAt: string;
+  }[];
   tags: string[];
   photos: { id: number; imageUri: string }[];
 }
@@ -58,13 +68,13 @@ export default function HotelDetailScreen() {
     }, [loadHotel])
   );
 
-  const handleWant = async () => {
+  const handleSave = async () => {
     if (!hotel) return;
     await toggleSave(db, 1, hotel.id, 'want');
     loadHotel();
   };
 
-  const handleBeen = () => {
+  const handleSlept = () => {
     if (!hotel) return;
     router.push(`/rating/${hotel.id}`);
   };
@@ -95,11 +105,13 @@ export default function HotelDetailScreen() {
   }
 
   const latestVisit = hotel.visits.length > 0 ? hotel.visits[0] : null;
+  const isSaved = hotel.save?.status === 'want';
+  const isSlept = hotel.save?.status === 'been';
 
   return (
     <SafeAreaView style={styles.safe}>
       <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
-        {/* Header */}
+        {/* Hero */}
         <View style={styles.heroContainer}>
           {hotel.coverPhoto ? (
             <Image source={{ uri: hotel.coverPhoto }} style={styles.heroImage} />
@@ -109,11 +121,11 @@ export default function HotelDetailScreen() {
             </View>
           )}
           <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
-            <Ionicons name="arrow-back" size={22} color={Colors.text} />
+            <Ionicons name="arrow-back" size={20} color={Colors.text} />
           </TouchableOpacity>
-          {hotel.save && (
-            <View style={styles.statusContainer}>
-              <StatusBadge status={hotel.save.status} />
+          {latestVisit?.rating !== null && latestVisit?.rating !== undefined && (
+            <View style={styles.stampContainer}>
+              <RatingStamp score={latestVisit.rating} size="default" />
             </View>
           )}
         </View>
@@ -133,75 +145,61 @@ export default function HotelDetailScreen() {
 
         {/* Tags */}
         {hotel.tags.length > 0 && (
-          <View style={styles.section}>
-            <View style={styles.tagsRow}>
-              {hotel.tags.map((tag) => (
-                <TagChip key={tag} name={tag} />
-              ))}
-            </View>
+          <View style={styles.tagsRow}>
+            {hotel.tags.map((tag) => (
+              <TagChip key={tag} name={tag} />
+            ))}
           </View>
         )}
 
-        {/* Action Buttons */}
+        {/* Actions */}
         <View style={styles.actionsSection}>
           <TouchableOpacity
-            style={[
-              styles.actionButton,
-              hotel.save?.status === 'want' && styles.activeWant,
-            ]}
-            onPress={handleWant}
+            style={[styles.actionButton, isSaved && styles.actionActive]}
+            onPress={handleSave}
             onLongPress={hotel.save ? handleRemoveSave : undefined}
             activeOpacity={0.7}
           >
             <Ionicons
-              name={hotel.save?.status === 'want' ? 'heart' : 'heart-outline'}
-              size={20}
-              color={hotel.save?.status === 'want' ? Colors.white : Colors.want}
+              name={isSaved ? 'star' : 'star-outline'}
+              size={18}
+              color={isSaved ? Colors.accent : Colors.text}
             />
-            <Text
-              style={[
-                styles.actionText,
-                hotel.save?.status === 'want' && styles.activeActionText,
-              ]}
-            >
-              Want
+            <Text style={[styles.actionText, isSaved && styles.actionTextActive]}>
+              Saved
             </Text>
           </TouchableOpacity>
 
           <TouchableOpacity
-            style={[
-              styles.actionButton,
-              hotel.save?.status === 'been' && styles.activeBeen,
-            ]}
-            onPress={handleBeen}
+            style={[styles.actionButton, isSlept && styles.actionActive]}
+            onPress={handleSlept}
             activeOpacity={0.7}
           >
             <Ionicons
-              name={hotel.save?.status === 'been' ? 'checkmark-circle' : 'checkmark-circle-outline'}
-              size={20}
-              color={hotel.save?.status === 'been' ? Colors.white : Colors.been}
+              name={isSlept ? 'bed' : 'bed-outline'}
+              size={18}
+              color={isSlept ? Colors.accent : Colors.text}
             />
-            <Text
-              style={[
-                styles.actionText,
-                hotel.save?.status === 'been' && styles.activeActionText,
-              ]}
-            >
-              Been
+            <Text style={[styles.actionText, isSlept && styles.actionTextActive]}>
+              Slept
             </Text>
           </TouchableOpacity>
         </View>
 
-        {/* Visit Details */}
+        {/* Your Stay */}
         {latestVisit && (
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Your Visit</Text>
-            <View style={styles.visitCard}>
-              {latestVisit.rating !== null && (
-                <View style={styles.ratingDisplay}>
-                  <Text style={styles.ratingNumber}>{latestVisit.rating}</Text>
-                  <Text style={styles.ratingMax}>/10</Text>
-                </View>
+            <Text style={styles.editorialLabel}>YOUR STAY</Text>
+            <View style={styles.stayDetails}>
+              {latestVisit.emotion && (
+                <Text style={styles.emotionText}>
+                  {formatEmotion(latestVisit.emotion)}
+                </Text>
+              )}
+              {latestVisit.nights && (
+                <Text style={styles.nightsText}>
+                  {formatNights(latestVisit.nights)}
+                </Text>
               )}
               {latestVisit.notes && (
                 <Text style={styles.notes}>{latestVisit.notes}</Text>
@@ -214,22 +212,29 @@ export default function HotelDetailScreen() {
         {/* Photos */}
         {hotel.photos.length > 0 && (
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Photos</Text>
+            <Text style={styles.editorialLabel}>PHOTOS</Text>
             <PhotoGrid photos={hotel.photos} />
           </View>
         )}
 
-        {/* Multiple visits */}
+        {/* All Visits */}
         {hotel.visits.length > 1 && (
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>
-              All Visits ({hotel.visits.length})
+            <Text style={styles.editorialLabel}>
+              ALL VISITS ({hotel.visits.length})
             </Text>
             {hotel.visits.map((visit) => (
               <View key={visit.id} style={styles.visitItem}>
-                <Text style={styles.visitItemDate}>{formatDate(visit.createdAt)}</Text>
+                <View>
+                  <Text style={styles.visitItemDate}>{formatDate(visit.createdAt)}</Text>
+                  {visit.emotion && (
+                    <Text style={styles.visitItemEmotion}>
+                      {formatEmotion(visit.emotion)}
+                    </Text>
+                  )}
+                </View>
                 {visit.rating !== null && (
-                  <Text style={styles.visitItemRating}>{visit.rating}/10</Text>
+                  <RatingStamp score={visit.rating} size="small" />
                 )}
               </View>
             ))}
@@ -260,7 +265,7 @@ const styles = StyleSheet.create({
     color: Colors.textSecondary,
   },
   heroContainer: {
-    height: 240,
+    height: 300,
     position: 'relative',
   },
   heroImage: {
@@ -281,130 +286,114 @@ const styles = StyleSheet.create({
     width: 36,
     height: 36,
     borderRadius: 18,
-    backgroundColor: Colors.white,
+    backgroundColor: 'rgba(255,255,255,0.9)',
     justifyContent: 'center',
     alignItems: 'center',
-    ...Layout.cardShadow,
   },
-  statusContainer: {
+  stampContainer: {
     position: 'absolute',
-    top: 12,
-    right: 12,
+    top: 16,
+    right: 16,
+    backgroundColor: 'rgba(247,247,245,0.92)',
+    borderRadius: 30,
+    padding: 2,
   },
   infoSection: {
-    padding: Layout.padding,
-    backgroundColor: Colors.white,
+    paddingHorizontal: Layout.padding,
+    paddingTop: 20,
+    paddingBottom: 8,
   },
   hotelName: {
-    fontSize: 24,
-    fontWeight: '700',
+    ...Typography.heading1,
     color: Colors.text,
-    letterSpacing: -0.3,
   },
   location: {
-    fontSize: 15,
+    fontSize: Typography.body.fontSize,
     color: Colors.textSecondary,
     marginTop: 4,
   },
   priceRow: {
     marginTop: 8,
   },
-  section: {
-    paddingHorizontal: Layout.padding,
-    paddingVertical: 16,
-    backgroundColor: Colors.white,
-    marginTop: 8,
-  },
-  sectionTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: Colors.text,
-    marginBottom: 12,
-  },
   tagsRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
+    paddingHorizontal: Layout.padding,
+    paddingVertical: 8,
   },
   actionsSection: {
     flexDirection: 'row',
     paddingHorizontal: Layout.padding,
     paddingVertical: 16,
     gap: 12,
-    backgroundColor: Colors.white,
-    marginTop: 8,
   },
   actionButton: {
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 14,
+    paddingVertical: 12,
     borderRadius: Layout.borderRadius,
-    borderWidth: 1.5,
+    borderWidth: 1,
     borderColor: Colors.border,
     gap: 8,
   },
-  activeWant: {
-    backgroundColor: Colors.want,
-    borderColor: Colors.want,
-  },
-  activeBeen: {
-    backgroundColor: Colors.been,
-    borderColor: Colors.been,
+  actionActive: {
+    borderColor: Colors.accent,
+    backgroundColor: Colors.accentLight,
   },
   actionText: {
-    fontSize: 15,
+    fontSize: Typography.body.fontSize,
     fontWeight: '600',
     color: Colors.text,
   },
-  activeActionText: {
-    color: Colors.white,
-  },
-  visitCard: {
-    backgroundColor: Colors.borderLight,
-    borderRadius: Layout.borderRadiusSmall,
-    padding: 16,
-  },
-  ratingDisplay: {
-    flexDirection: 'row',
-    alignItems: 'baseline',
-    marginBottom: 8,
-  },
-  ratingNumber: {
-    fontSize: 36,
-    fontWeight: '700',
+  actionTextActive: {
     color: Colors.accent,
   },
-  ratingMax: {
-    fontSize: 18,
-    fontWeight: '500',
+  section: {
+    paddingHorizontal: Layout.padding,
+    paddingTop: Layout.sectionGap,
+  },
+  editorialLabel: {
+    ...Typography.editorial,
     color: Colors.textSecondary,
-    marginLeft: 2,
+    marginBottom: 16,
+  },
+  stayDetails: {
+    gap: 6,
+  },
+  emotionText: {
+    ...Typography.heading3,
+    color: Colors.text,
+  },
+  nightsText: {
+    fontSize: Typography.body.fontSize,
+    color: Colors.textSecondary,
   },
   notes: {
-    fontSize: 14,
+    fontSize: Typography.body.fontSize,
     color: Colors.textSecondary,
-    lineHeight: 20,
-    marginBottom: 8,
+    lineHeight: 22,
+    marginTop: 4,
   },
   visitDate: {
-    fontSize: 12,
+    fontSize: Typography.small.fontSize,
     color: Colors.textLight,
+    marginTop: 4,
   },
   visitItem: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    paddingVertical: 8,
-    borderBottomWidth: 1,
-    borderBottomColor: Colors.borderLight,
+    alignItems: 'center',
+    paddingVertical: 12,
   },
   visitItemDate: {
-    fontSize: 14,
-    color: Colors.textSecondary,
+    fontSize: Typography.body.fontSize,
+    color: Colors.text,
   },
-  visitItemRating: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: Colors.accent,
+  visitItemEmotion: {
+    fontSize: Typography.caption.fontSize,
+    color: Colors.textSecondary,
+    marginTop: 2,
   },
 });

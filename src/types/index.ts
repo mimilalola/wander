@@ -1,5 +1,31 @@
 export type SaveStatus = 'want' | 'been';
 
+export type EmotionTier = 'loved' | 'nice' | 'wouldnt_return';
+
+// UI display mapping — DB stays 'want'/'been', UI shows 'Saved'/'Slept'
+export function displayStatus(status: SaveStatus): string {
+  return status === 'want' ? 'Saved' : 'Slept';
+}
+
+export function displayStatusIcon(status: SaveStatus): string {
+  return status === 'want' ? 'star-outline' : 'bed-outline';
+}
+
+export function displayStatusIconActive(status: SaveStatus): string {
+  return status === 'want' ? 'star' : 'bed';
+}
+
+export function displayEmotion(emotion: EmotionTier): string {
+  switch (emotion) {
+    case 'loved':
+      return 'Loved it';
+    case 'nice':
+      return 'It was nice';
+    case 'wouldnt_return':
+      return "Wouldn't return";
+  }
+}
+
 export interface Hotel {
   id: number;
   name: string;
@@ -27,6 +53,8 @@ export interface Visit {
   rating: number | null;
   rank: number | null;
   notes: string | null;
+  emotion: EmotionTier | null;
+  nights: number | null;
   createdAt: string;
 }
 
@@ -50,10 +78,11 @@ export interface HotelWithSave extends Hotel {
 }
 
 export interface ProfileStats {
-  hotelsWanted: number;
-  hotelsVisited: number;
+  hotelsSaved: number;
+  hotelsSlept: number;
   averageRating: number | null;
   topCities: { city: string; count: number }[];
   topTags: { tag: string; count: number }[];
   countriesVisited: number;
+  tasteSummary: string;
 }

@@ -83,6 +83,14 @@ export async function getComparisonCandidates(
     .limit(3);
 }
 
+export async function deleteVisitsForHotel(db: Database, userId: number, hotelId: number) {
+  await db
+    .delete(schema.visits)
+    .where(
+      sql`${schema.visits.userId} = ${userId} AND ${schema.visits.hotelId} = ${hotelId}`
+    );
+}
+
 export async function getVisitsByTier(db: Database, userId: number, emotion: EmotionTier) {
   return db
     .select()

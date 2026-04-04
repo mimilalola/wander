@@ -84,5 +84,11 @@ export interface ProfileStats {
   topCities: { city: string; count: number }[];
   topTags: { tag: string; count: number }[];
   countriesVisited: number;
+  citiesVisited: number;
   tasteSummary: string;
+}
+
+export interface PassportBadge {
+  title: string;
+  subtitle: string;
 }

@@ -43,14 +43,15 @@ export function EmotionPicker({ selected, onSelect }: EmotionPickerProps) {
 
 const styles = StyleSheet.create({
   container: {
-    gap: 12,
+    gap: 16,
   },
   option: {
     borderWidth: 1,
     borderColor: Colors.border,
     borderRadius: Layout.borderRadius,
-    paddingVertical: 16,
+    paddingVertical: 20,
     paddingHorizontal: 20,
+    backgroundColor: Colors.white,
   },
   optionSelected: {
     borderColor: Colors.accent,
@@ -60,7 +61,7 @@ const styles = StyleSheet.create({
     fontSize: Typography.body.fontSize,
     fontWeight: '600',
     color: Colors.text,
-    marginBottom: 2,
+    marginBottom: 4,
   },
   labelSelected: {
     color: Colors.accent,
@@ -68,6 +69,7 @@ const styles = StyleSheet.create({
   description: {
     fontSize: Typography.caption.fontSize,
     color: Colors.textSecondary,
+    lineHeight: 18,
   },
   descriptionSelected: {
     color: Colors.accent,

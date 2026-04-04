@@ -32,10 +32,13 @@ export function SegmentControl({ options, selected, onChange }: SegmentControlPr
 const styles = StyleSheet.create({
   container: {
     flexDirection: 'row',
-    gap: 24,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(0,0,0,0.04)',
   },
   segment: {
-    paddingBottom: 8,
+    flex: 1,
+    paddingVertical: 12,
+    alignItems: 'center',
     borderBottomWidth: 2,
     borderBottomColor: 'transparent',
   },

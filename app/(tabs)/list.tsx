@@ -1,5 +1,16 @@
-import React, { useState, useCallback } from 'react';
-import { View, Text, StyleSheet, FlatList, SafeAreaView, TouchableOpacity } from 'react-native';
+import React, { useState, useCallback, useRef } from 'react';
+import {
+  View,
+  Text,
+  StyleSheet,
+  FlatList,
+  SafeAreaView,
+  TouchableOpacity,
+  Alert,
+  Animated,
+  PanResponder,
+  Modal,
+} from 'react-native';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { useSQLiteContext } from 'expo-sqlite';
 import { Ionicons } from '@expo/vector-icons';
@@ -11,6 +22,8 @@ import { Colors } from '../../src/constants/colors';
 import { Layout } from '../../src/constants/layout';
 import { Typography } from '../../src/constants/typography';
 import { createDb } from '../../src/db/client';
+import { removeSave } from '../../src/dal/saves';
+import { deleteVisitsForHotel } from '../../src/dal/visits';
 import * as schema from '../../src/db/schema';
 import { formatEmotion } from '../../src/utils/format';
 import type { SaveStatus, EmotionTier } from '../../src/types';
@@ -26,12 +39,75 @@ interface ListHotel {
   emotion: EmotionTier | null;
 }
 
+function SwipeableRow({
+  children,
+  onDelete,
+}: {
+  children: React.ReactNode;
+  onDelete: () => void;
+}) {
+  const translateX = useRef(new Animated.Value(0)).current;
+
+  const panResponder = useRef(
+    PanResponder.create({
+      onMoveShouldSetPanResponder: (_, gestureState) =>
+        Math.abs(gestureState.dx) > 10 && Math.abs(gestureState.dy) < 10,
+      onPanResponderMove: (_, gestureState) => {
+        if (gestureState.dx < 0) {
+          translateX.setValue(Math.max(gestureState.dx, -80));
+        }
+      },
+      onPanResponderRelease: (_, gestureState) => {
+        if (gestureState.dx < -50) {
+          Animated.spring(translateX, { toValue: -80, useNativeDriver: true }).start();
+        } else {
+          Animated.spring(translateX, { toValue: 0, useNativeDriver: true }).start();
+        }
+      },
+    })
+  ).current;
+
+  return (
+    <View style={swipeStyles.container}>
+      <TouchableOpacity style={swipeStyles.deleteAction} onPress={onDelete} activeOpacity={0.7}>
+        <Ionicons name="trash-outline" size={18} color={Colors.white} />
+      </TouchableOpacity>
+      <Animated.View
+        style={[swipeStyles.content, { transform: [{ translateX }] }]}
+        {...panResponder.panHandlers}
+      >
+        {children}
+      </Animated.View>
+    </View>
+  );
+}
+
+const swipeStyles = StyleSheet.create({
+  container: {
+    position: 'relative',
+  },
+  deleteAction: {
+    position: 'absolute',
+    right: 0,
+    top: 0,
+    bottom: 0,
+    width: 80,
+    backgroundColor: Colors.accent,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  content: {
+    backgroundColor: Colors.background,
+  },
+});
+
 export default function ListScreen() {
   const router = useRouter();
   const sqlite = useSQLiteContext();
   const db = createDb(sqlite);
   const [filter, setFilter] = useState('Slept');
   const [hotels, setHotels] = useState<ListHotel[]>([]);
+  const [menuHotel, setMenuHotel] = useState<ListHotel | null>(null);
 
   const loadHotels = useCallback(async () => {
     const results = await db
@@ -54,7 +130,6 @@ export default function ListScreen() {
         .select({
           rating: schema.visits.rating,
           emotion: schema.visits.emotion,
-          rank: schema.visits.rank,
         })
         .from(schema.visits)
         .where(sql`${schema.visits.userId} = 1 AND ${schema.visits.hotelId} = ${h.id}`)
@@ -76,44 +151,91 @@ export default function ListScreen() {
     }, [loadHotels])
   );
 
+  const handleDelete = (hotel: ListHotel) => {
+    Alert.alert(
+      'Remove stay',
+      `Are you sure you want to remove ${hotel.name}?`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Remove',
+          style: 'destructive',
+          onPress: async () => {
+            await deleteVisitsForHotel(db, 1, hotel.id);
+            await removeSave(db, 1, hotel.id);
+            loadHotels();
+          },
+        },
+      ]
+    );
+  };
+
+  const handleMenuAction = (action: string) => {
+    if (!menuHotel) return;
+    const hotel = menuHotel;
+    setMenuHotel(null);
+
+    switch (action) {
+      case 'edit':
+        router.push(`/rating/${hotel.id}`);
+        break;
+      case 'newStay':
+        router.push(`/rating/${hotel.id}`);
+        break;
+      case 'delete':
+        handleDelete(hotel);
+        break;
+    }
+  };
+
   const sleptHotels = hotels
     .filter((h) => h.saveStatus === 'been')
     .sort((a, b) => (b.rating ?? 0) - (a.rating ?? 0));
 
   const savedHotels = hotels.filter((h) => h.saveStatus === 'want');
-
   const filtered = filter === 'Slept' ? sleptHotels : savedHotels;
 
   const renderSleptItem = ({ item, index }: { item: ListHotel; index: number }) => (
-    <TouchableOpacity
-      style={styles.sleptItem}
-      onPress={() => router.push(`/hotel/${item.id}`)}
-      activeOpacity={0.7}
-    >
-      <Text style={styles.rank}>{index + 1}</Text>
-      <View style={styles.sleptInfo}>
-        <Text style={styles.hotelName} numberOfLines={1}>{item.name}</Text>
-        <Text style={styles.hotelLocation}>
-          {item.city}, {item.country}
-          {item.emotion ? ` \u00B7 ${formatEmotion(item.emotion)}` : ''}
-        </Text>
-      </View>
-      <RatingStamp score={item.rating} size="small" />
-    </TouchableOpacity>
+    <SwipeableRow onDelete={() => handleDelete(item)}>
+      <TouchableOpacity
+        style={styles.sleptItem}
+        onPress={() => router.push(`/hotel/${item.id}`)}
+        activeOpacity={0.7}
+      >
+        <Text style={styles.rank}>{index + 1}</Text>
+        <View style={styles.sleptInfo}>
+          <Text style={styles.hotelName} numberOfLines={1}>{item.name}</Text>
+          <Text style={styles.hotelLocation}>
+            {item.city}, {item.country}
+            {item.emotion ? ` \u00B7 ${formatEmotion(item.emotion)}` : ''}
+          </Text>
+        </View>
+        <RatingStamp score={item.rating} size="small" />
+        <TouchableOpacity
+          style={styles.menuButton}
+          onPress={() => setMenuHotel(item)}
+          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+        >
+          <Ionicons name="ellipsis-vertical" size={16} color={Colors.textLight} />
+        </TouchableOpacity>
+      </TouchableOpacity>
+    </SwipeableRow>
   );
 
   const renderSavedItem = ({ item }: { item: ListHotel }) => (
-    <TouchableOpacity
-      style={styles.savedItem}
-      onPress={() => router.push(`/hotel/${item.id}`)}
-      activeOpacity={0.7}
-    >
-      <Ionicons name="star-outline" size={16} color={Colors.textSecondary} />
-      <View style={styles.savedInfo}>
-        <Text style={styles.hotelName} numberOfLines={1}>{item.name}</Text>
-        <Text style={styles.hotelLocation}>{item.city}, {item.country}</Text>
-      </View>
-    </TouchableOpacity>
+    <SwipeableRow onDelete={() => handleDelete(item)}>
+      <TouchableOpacity
+        style={styles.savedItem}
+        onPress={() => router.push(`/hotel/${item.id}`)}
+        activeOpacity={0.7}
+      >
+        <Ionicons name="star" size={16} color={Colors.accent} />
+        <View style={styles.savedInfo}>
+          <Text style={styles.hotelName} numberOfLines={1}>{item.name}</Text>
+          <Text style={styles.hotelLocation}>{item.city}, {item.country}</Text>
+        </View>
+      </TouchableOpacity>
+    </SwipeableRow>
   );
 
   return (
@@ -150,6 +272,34 @@ export default function ListScreen() {
           }
         />
       </View>
+
+      {/* 3-dot menu modal */}
+      <Modal visible={menuHotel !== null} transparent animationType="fade">
+        <TouchableOpacity
+          style={styles.modalOverlay}
+          activeOpacity={1}
+          onPress={() => setMenuHotel(null)}
+        >
+          <View style={styles.menuSheet}>
+            <Text style={styles.menuTitle} numberOfLines={1}>{menuHotel?.name}</Text>
+            <TouchableOpacity style={styles.menuItem} onPress={() => handleMenuAction('edit')}>
+              <Ionicons name="create-outline" size={18} color={Colors.text} />
+              <Text style={styles.menuItemText}>Edit ranking</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.menuItem} onPress={() => handleMenuAction('newStay')}>
+              <Ionicons name="add-outline" size={18} color={Colors.text} />
+              <Text style={styles.menuItemText}>Add new stay</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.menuItem} onPress={() => handleMenuAction('delete')}>
+              <Ionicons name="trash-outline" size={18} color={Colors.accent} />
+              <Text style={[styles.menuItemText, { color: Colors.accent }]}>Delete</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.menuCancel} onPress={() => setMenuHotel(null)}>
+              <Text style={styles.menuCancelText}>Cancel</Text>
+            </TouchableOpacity>
+          </View>
+        </TouchableOpacity>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -165,7 +315,7 @@ const styles = StyleSheet.create({
   header: {
     paddingHorizontal: Layout.padding,
     paddingTop: 12,
-    paddingBottom: 8,
+    paddingBottom: 12,
   },
   title: {
     ...Typography.heading1,
@@ -173,7 +323,7 @@ const styles = StyleSheet.create({
   },
   segmentContainer: {
     paddingHorizontal: Layout.padding,
-    paddingBottom: 16,
+    marginBottom: 8,
   },
   listContent: {
     paddingHorizontal: Layout.padding,
@@ -182,7 +332,7 @@ const styles = StyleSheet.create({
   sleptItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 14,
+    paddingVertical: 16,
     gap: 14,
   },
   rank: {
@@ -203,15 +353,59 @@ const styles = StyleSheet.create({
   hotelLocation: {
     fontSize: Typography.caption.fontSize,
     color: Colors.textSecondary,
-    marginTop: 1,
+    marginTop: 2,
+  },
+  menuButton: {
+    padding: 4,
+    marginLeft: 4,
   },
   savedItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 16,
+    gap: 12,
+  },
+  savedInfo: {
+    flex: 1,
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.4)',
+    justifyContent: 'flex-end',
+  },
+  menuSheet: {
+    backgroundColor: Colors.white,
+    borderTopLeftRadius: 16,
+    borderTopRightRadius: 16,
+    paddingTop: 20,
+    paddingBottom: 34,
+    paddingHorizontal: Layout.padding,
+  },
+  menuTitle: {
+    ...Typography.bodyBold,
+    color: Colors.text,
+    marginBottom: 16,
+  },
+  menuItem: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingVertical: 14,
     gap: 12,
   },
-  savedInfo: {
-    flex: 1,
+  menuItemText: {
+    fontSize: Typography.body.fontSize,
+    color: Colors.text,
+  },
+  menuCancel: {
+    marginTop: 8,
+    paddingVertical: 14,
+    alignItems: 'center',
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(0,0,0,0.04)',
+  },
+  menuCancelText: {
+    fontSize: Typography.body.fontSize,
+    color: Colors.textSecondary,
+    fontWeight: '500',
   },
 });

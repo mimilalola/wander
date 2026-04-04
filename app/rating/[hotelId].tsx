@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -23,7 +23,7 @@ import { TextComparison } from '../../src/components/TextComparison';
 import { RatingStamp } from '../../src/components/RatingStamp';
 import { createDb } from '../../src/db/client';
 import { getHotelById, getAllTags, addTagsToHotel, getHotelTags } from '../../src/dal/hotels';
-import { toggleSave } from '../../src/dal/saves';
+import { setSave } from '../../src/dal/saves';
 import {
   createVisit,
   getComparisonCandidates,
@@ -51,28 +51,19 @@ export default function RatingScreen() {
   const [step, setStep] = useState<Step>('tags');
   const [hotelName, setHotelName] = useState('');
 
-  // Tags step
   const [allTags, setAllTags] = useState<{ id: number; name: string }[]>([]);
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
   const [existingTags, setExistingTags] = useState<string[]>([]);
-
-  // Nights step
   const [nights, setNights] = useState<number | null>(null);
-
-  // Emotion step
   const [emotion, setEmotion] = useState<EmotionTier | null>(null);
 
-  // Compare step
   const [comparisons, setComparisons] = useState<CompCandidate[]>([]);
   const [compIndex, setCompIndex] = useState(0);
   const [newVisitId, setNewVisitId] = useState<number | null>(null);
   const [newVisitRank, setNewVisitRank] = useState(1500);
 
-  // Photos (collected during confirm)
   const [photoUris, setPhotoUris] = useState<string[]>([]);
   const [notes, setNotes] = useState('');
-
-  // Derived score
   const [derivedScore, setDerivedScore] = useState<number | null>(null);
 
   useEffect(() => {
@@ -97,7 +88,6 @@ export default function RatingScreen() {
   const createVisitAndCompare = async () => {
     if (!emotion) return;
 
-    // Create visit
     const visit = await createVisit(db, {
       userId: 1,
       hotelId: parseInt(hotelId!),
@@ -106,20 +96,17 @@ export default function RatingScreen() {
     });
     setNewVisitId(visit.id);
 
-    // Mark as 'been'
-    await toggleSave(db, 1, parseInt(hotelId!), 'been');
+    // Use setSave (non-toggling) so re-slept doesn't remove
+    await setSave(db, 1, parseInt(hotelId!), 'been');
 
-    // Save tags
     const newTags = selectedTags.filter((t) => !existingTags.includes(t));
     if (newTags.length > 0) {
       await addTagsToHotel(db, parseInt(hotelId!), newTags);
     }
 
-    // Load comparisons filtered by emotion tier
     const candidates = await getComparisonCandidates(db, 1, parseInt(hotelId!), emotion);
 
     if (emotion === 'wouldnt_return') {
-      // Allow 1-2 comparisons for wouldnt_return
       setComparisons((candidates as CompCandidate[]).slice(0, 2));
     } else {
       setComparisons(candidates as CompCandidate[]);
@@ -131,12 +118,23 @@ export default function RatingScreen() {
   const computeAndSetScore = async (visitId: number, rank: number, emotionTier: EmotionTier) => {
     const tierVisits = await getVisitsByTier(db, 1, emotionTier);
     const allRanks = tierVisits.map((v) => ({ rank: v.rank }));
-    // Include the new visit's rank
     const withNew = [...allRanks.filter((v) => v.rank !== rank), { rank }];
     const score = computeTierScore(rank, withNew, emotionTier);
     setDerivedScore(score);
     await updateVisitRating(db, visitId, Math.round(score));
     return score;
+  };
+
+  const handleBack = () => {
+    const STEPS: Step[] = ['tags', 'nights', 'emotion', 'compare', 'confirm'];
+    const currentIndex = STEPS.indexOf(step);
+    if (currentIndex <= 0) {
+      router.back();
+    } else {
+      // Can't go back past emotion once visit is created
+      if (step === 'compare' || step === 'confirm') return;
+      setStep(STEPS[currentIndex - 1]);
+    }
   };
 
   const handleNext = async () => {
@@ -159,7 +157,6 @@ export default function RatingScreen() {
         break;
       }
       case 'compare':
-        // Done comparing — compute score
         if (newVisitId && emotion) {
           await computeAndSetScore(newVisitId, newVisitRank, emotion);
         }
@@ -190,13 +187,11 @@ export default function RatingScreen() {
       await updateVisitRank(db, current.visit.id, newWinnerRank);
     }
 
-    // Update the new visit rank in DB
     await updateVisitRank(db, newVisitId, isNewWinner ? newWinnerRank : newLoserRank);
 
     if (compIndex < comparisons.length - 1) {
       setCompIndex(compIndex + 1);
     } else {
-      // Done with comparisons
       const finalRank = isNewWinner ? newWinnerRank : newLoserRank;
       if (emotion) {
         await computeAndSetScore(newVisitId, finalRank, emotion);
@@ -218,20 +213,12 @@ export default function RatingScreen() {
 
   const handleSave = async () => {
     if (!newVisitId) return;
-
-    // Update notes
     if (notes) {
-      await sqlite.runAsync(
-        `UPDATE visits SET notes = ? WHERE id = ?`,
-        [notes, newVisitId]
-      );
+      await sqlite.runAsync('UPDATE visits SET notes = ? WHERE id = ?', [notes, newVisitId]);
     }
-
-    // Save photos
     if (photoUris.length > 0) {
       await addPhotos(db, newVisitId, photoUris);
     }
-
     router.back();
   };
 
@@ -251,25 +238,23 @@ export default function RatingScreen() {
 
   const STEPS: Step[] = ['tags', 'nights', 'emotion', 'compare', 'confirm'];
   const stepIndex = STEPS.indexOf(step);
-
+  const canGoBack = step === 'tags' || step === 'nights' || step === 'emotion';
   const currentComparison = comparisons[compIndex];
 
   return (
     <SafeAreaView style={styles.safe}>
       {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.closeButton}>
-          <Ionicons name="close" size={22} color={Colors.text} />
+        <TouchableOpacity onPress={canGoBack ? handleBack : () => router.back()} style={styles.headerLeft}>
+          <Ionicons name={canGoBack && step !== 'tags' ? 'arrow-back' : 'close'} size={22} color={Colors.text} />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>{hotelName}</Text>
+        <View style={styles.headerRight} />
         <View style={styles.stepIndicator}>
           {STEPS.map((s, i) => (
             <View
               key={s}
-              style={[
-                styles.stepLine,
-                i <= stepIndex && styles.stepLineActive,
-              ]}
+              style={[styles.stepLine, i <= stepIndex && styles.stepLineActive]}
             />
           ))}
         </View>
@@ -280,7 +265,6 @@ export default function RatingScreen() {
         contentContainerStyle={styles.contentInner}
         showsVerticalScrollIndicator={false}
       >
-        {/* Tags */}
         {step === 'tags' && (
           <View>
             <Text style={styles.editorialLabel}>WHAT DEFINED THIS PLACE?</Text>
@@ -298,7 +282,6 @@ export default function RatingScreen() {
           </View>
         )}
 
-        {/* Nights */}
         {step === 'nights' && (
           <View>
             <Text style={styles.editorialLabel}>YOUR STAY</Text>
@@ -309,7 +292,6 @@ export default function RatingScreen() {
           </View>
         )}
 
-        {/* Emotion */}
         {step === 'emotion' && (
           <View>
             <Text style={styles.editorialLabel}>YOUR FEELING</Text>
@@ -318,7 +300,6 @@ export default function RatingScreen() {
           </View>
         )}
 
-        {/* Compare */}
         {step === 'compare' && currentComparison && (
           <View>
             <Text style={styles.editorialLabel}>
@@ -332,19 +313,13 @@ export default function RatingScreen() {
           </View>
         )}
 
-        {/* Confirm */}
         {step === 'confirm' && (
           <View style={styles.confirmContainer}>
-            <Text style={styles.editorialLabel}>YOUR SCORE</Text>
             <View style={styles.stampCenter}>
-              <RatingStamp score={derivedScore} size="large" />
+              <RatingStamp score={derivedScore} size="large" animated />
             </View>
-            {derivedScore !== null && (
-              <Text style={styles.scoreText}>{derivedScore.toFixed(1)} / 10</Text>
-            )}
             <Text style={styles.hotelNameConfirm}>{hotelName}</Text>
 
-            {/* Notes */}
             <TextInput
               style={styles.notesInput}
               multiline
@@ -355,7 +330,6 @@ export default function RatingScreen() {
               textAlignVertical="top"
             />
 
-            {/* Photos */}
             <View style={styles.photosSection}>
               <ScrollView horizontal showsHorizontalScrollIndicator={false}>
                 {photoUris.map((uri, i) => (
@@ -414,11 +388,17 @@ const styles = StyleSheet.create({
     paddingBottom: 16,
     alignItems: 'center',
   },
-  closeButton: {
+  headerLeft: {
     position: 'absolute',
     top: 12,
     left: Layout.padding,
     padding: 4,
+  },
+  headerRight: {
+    position: 'absolute',
+    top: 12,
+    right: Layout.padding,
+    width: 30,
   },
   headerTitle: {
     ...Typography.captionBold,
@@ -433,7 +413,7 @@ const styles = StyleSheet.create({
   stepLine: {
     flex: 1,
     height: 2,
-    backgroundColor: Colors.borderLight,
+    backgroundColor: 'rgba(0,0,0,0.04)',
     borderRadius: 1,
   },
   stepLineActive: {
@@ -454,7 +434,7 @@ const styles = StyleSheet.create({
   stepTitle: {
     ...Typography.heading2,
     color: Colors.text,
-    marginBottom: 24,
+    marginBottom: 28,
   },
   tagsWrap: {
     flexDirection: 'row',
@@ -467,18 +447,13 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   stampCenter: {
-    marginVertical: 20,
-  },
-  scoreText: {
-    ...Typography.heading3,
-    color: Colors.accent,
-    marginBottom: 4,
+    marginVertical: 24,
   },
   hotelNameConfirm: {
     ...Typography.heading2,
     color: Colors.text,
     textAlign: 'center',
-    marginBottom: 24,
+    marginBottom: 28,
   },
   notesInput: {
     width: '100%',
@@ -488,7 +463,8 @@ const styles = StyleSheet.create({
     color: Colors.text,
     minHeight: 80,
     borderWidth: 1,
-    borderColor: Colors.border,
+    borderColor: 'rgba(0,0,0,0.04)',
+    backgroundColor: Colors.white,
     marginBottom: 20,
   },
   photosSection: {
@@ -516,8 +492,7 @@ const styles = StyleSheet.create({
     height: 80,
     borderRadius: Layout.borderRadiusSmall,
     borderWidth: 1,
-    borderColor: Colors.border,
-    borderStyle: 'dashed',
+    borderColor: 'rgba(0,0,0,0.04)',
     justifyContent: 'center',
     alignItems: 'center',
   },

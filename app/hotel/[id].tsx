@@ -8,6 +8,7 @@ import {
   TouchableOpacity,
   Image,
   Alert,
+  TextInput,
 } from 'react-native';
 import { useLocalSearchParams, useRouter, useFocusEffect } from 'expo-router';
 import { useSQLiteContext } from 'expo-sqlite';
@@ -20,8 +21,8 @@ import { TagChip } from '../../src/components/TagChip';
 import { RatingStamp } from '../../src/components/RatingStamp';
 import { PhotoGrid } from '../../src/components/PhotoGrid';
 import { createDb } from '../../src/db/client';
-import { getHotelWithDetails } from '../../src/dal/hotels';
-import { toggleSave, removeSave } from '../../src/dal/saves';
+import { getHotelWithDetails, getAllTags, addTagsToHotel, getHotelTags } from '../../src/dal/hotels';
+import { toggleSave, setSave, removeSave } from '../../src/dal/saves';
 import { formatDate, formatEmotion, formatNights } from '../../src/utils/format';
 import type { EmotionTier } from '../../src/types';
 
@@ -55,6 +56,8 @@ export default function HotelDetailScreen() {
   const sqlite = useSQLiteContext();
   const db = createDb(sqlite);
   const [hotel, setHotel] = useState<HotelDetails | null>(null);
+  const [editingNotes, setEditingNotes] = useState(false);
+  const [notesText, setNotesText] = useState('');
 
   const loadHotel = useCallback(async () => {
     if (!id) return;
@@ -76,6 +79,18 @@ export default function HotelDetailScreen() {
 
   const handleSlept = () => {
     if (!hotel) return;
+    // If already slept, offer choice: add new stay or view existing
+    if (hotel.save?.status === 'been' && hotel.visits.length > 0) {
+      Alert.alert(
+        hotel.name,
+        'You already have a stay recorded.',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Add new stay', onPress: () => router.push(`/rating/${hotel.id}`) },
+        ]
+      );
+      return;
+    }
     router.push(`/rating/${hotel.id}`);
   };
 
@@ -92,6 +107,24 @@ export default function HotelDetailScreen() {
         },
       },
     ]);
+  };
+
+  const handleEditNotes = () => {
+    const latestVisit = hotel?.visits[0];
+    setNotesText(latestVisit?.notes ?? '');
+    setEditingNotes(true);
+  };
+
+  const handleSaveNotes = async () => {
+    const latestVisit = hotel?.visits[0];
+    if (latestVisit) {
+      await sqlite.runAsync(
+        'UPDATE visits SET notes = ? WHERE id = ?',
+        [notesText || null, latestVisit.id]
+      );
+    }
+    setEditingNotes(false);
+    loadHotel();
   };
 
   if (!hotel) {
@@ -143,7 +176,7 @@ export default function HotelDetailScreen() {
           )}
         </View>
 
-        {/* Tags */}
+        {/* Tags — always visible */}
         {hotel.tags.length > 0 && (
           <View style={styles.tagsRow}>
             {hotel.tags.map((tag) => (
@@ -201,8 +234,37 @@ export default function HotelDetailScreen() {
                   {formatNights(latestVisit.nights)}
                 </Text>
               )}
-              {latestVisit.notes && (
-                <Text style={styles.notes}>{latestVisit.notes}</Text>
+              {/* Notes — behind edit action */}
+              {editingNotes ? (
+                <View style={styles.notesEditContainer}>
+                  <TextInput
+                    style={styles.notesInput}
+                    multiline
+                    value={notesText}
+                    onChangeText={setNotesText}
+                    placeholder="Add a note..."
+                    placeholderTextColor={Colors.textLight}
+                    textAlignVertical="top"
+                    autoFocus
+                  />
+                  <View style={styles.notesActions}>
+                    <TouchableOpacity onPress={() => setEditingNotes(false)}>
+                      <Text style={styles.notesCancelText}>Cancel</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity onPress={handleSaveNotes}>
+                      <Text style={styles.notesSaveText}>Save</Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              ) : (
+                <TouchableOpacity onPress={handleEditNotes} style={styles.editNotesButton}>
+                  {latestVisit.notes ? (
+                    <Text style={styles.notes}>{latestVisit.notes}</Text>
+                  ) : null}
+                  <Text style={styles.editNotesLink}>
+                    {latestVisit.notes ? 'Edit notes' : 'Add notes'}
+                  </Text>
+                </TouchableOpacity>
               )}
               <Text style={styles.visitDate}>{formatDate(latestVisit.createdAt)}</Text>
             </View>
@@ -335,7 +397,8 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     borderRadius: Layout.borderRadius,
     borderWidth: 1,
-    borderColor: Colors.border,
+    borderColor: 'rgba(0,0,0,0.04)',
+    backgroundColor: Colors.white,
     gap: 8,
   },
   actionActive: {
@@ -374,7 +437,43 @@ const styles = StyleSheet.create({
     fontSize: Typography.body.fontSize,
     color: Colors.textSecondary,
     lineHeight: 22,
+  },
+  editNotesButton: {
     marginTop: 4,
+  },
+  editNotesLink: {
+    fontSize: Typography.caption.fontSize,
+    color: Colors.accent,
+    fontWeight: '500',
+    marginTop: 4,
+  },
+  notesEditContainer: {
+    marginTop: 4,
+  },
+  notesInput: {
+    borderRadius: Layout.borderRadius,
+    padding: 12,
+    fontSize: Typography.body.fontSize,
+    color: Colors.text,
+    minHeight: 60,
+    borderWidth: 1,
+    borderColor: 'rgba(0,0,0,0.04)',
+    backgroundColor: Colors.white,
+  },
+  notesActions: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    gap: 16,
+    marginTop: 8,
+  },
+  notesCancelText: {
+    fontSize: Typography.caption.fontSize,
+    color: Colors.textSecondary,
+  },
+  notesSaveText: {
+    fontSize: Typography.caption.fontSize,
+    color: Colors.accent,
+    fontWeight: '600',
   },
   visitDate: {
     fontSize: Typography.small.fontSize,
@@ -385,7 +484,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingVertical: 12,
+    paddingVertical: 14,
   },
   visitItemDate: {
     fontSize: Typography.body.fontSize,

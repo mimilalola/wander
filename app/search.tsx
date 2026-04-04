@@ -4,11 +4,12 @@ import { useRouter } from 'expo-router';
 import { useSQLiteContext } from 'expo-sqlite';
 import { Ionicons } from '@expo/vector-icons';
 import { SearchBar } from '../src/components/SearchBar';
-import { HotelListItem } from '../src/components/HotelListItem';
 import { Colors } from '../src/constants/colors';
 import { Layout } from '../src/constants/layout';
+import { Typography } from '../src/constants/typography';
 import { createDb } from '../src/db/client';
 import { createHotel, addTagsToHotel, searchLocalHotels } from '../src/dal/hotels';
+import { setSave } from '../src/dal/saves';
 import { mockHotels } from '../src/data/mock-hotels';
 
 export default function SearchScreen() {
@@ -20,38 +21,58 @@ export default function SearchScreen() {
   const filteredResults = useMemo(() => {
     if (query.length < 2) return [];
     const q = query.toLowerCase();
-    return mockHotels.filter(
-      (h) =>
-        h.name.toLowerCase().includes(q) ||
-        h.city.toLowerCase().includes(q) ||
-        h.country.toLowerCase().includes(q)
-    ).slice(0, 20);
+    return mockHotels
+      .filter(
+        (h) =>
+          h.name.toLowerCase().includes(q) ||
+          h.city.toLowerCase().includes(q) ||
+          h.country.toLowerCase().includes(q)
+      )
+      .slice(0, 20);
   }, [query]);
+
+  const ensureHotelInDb = useCallback(
+    async (hotel: (typeof mockHotels)[0]): Promise<number> => {
+      const existing = await searchLocalHotels(db, hotel.name);
+      if (existing.length > 0 && existing[0].name === hotel.name) {
+        return existing[0].id;
+      }
+      const created = await createHotel(db, {
+        name: hotel.name,
+        city: hotel.city,
+        country: hotel.country,
+        latitude: hotel.latitude,
+        longitude: hotel.longitude,
+        priceLevel: hotel.priceLevel,
+      });
+      await addTagsToHotel(db, created.id, hotel.tags);
+      return created.id;
+    },
+    [db]
+  );
 
   const handleSelectHotel = useCallback(
     async (hotel: (typeof mockHotels)[0]) => {
-      // Check if already in local DB
-      const existing = await searchLocalHotels(db, hotel.name);
-      let hotelId: number;
-
-      if (existing.length > 0 && existing[0].name === hotel.name) {
-        hotelId = existing[0].id;
-      } else {
-        const created = await createHotel(db, {
-          name: hotel.name,
-          city: hotel.city,
-          country: hotel.country,
-          latitude: hotel.latitude,
-          longitude: hotel.longitude,
-          priceLevel: hotel.priceLevel,
-        });
-        hotelId = created.id;
-        await addTagsToHotel(db, hotelId, hotel.tags);
-      }
-
+      const hotelId = await ensureHotelInDb(hotel);
       router.replace(`/hotel/${hotelId}`);
     },
-    [db, router]
+    [ensureHotelInDb, router]
+  );
+
+  const handleQuickSave = useCallback(
+    async (hotel: (typeof mockHotels)[0]) => {
+      const hotelId = await ensureHotelInDb(hotel);
+      await setSave(db, 1, hotelId, 'want');
+    },
+    [ensureHotelInDb, db]
+  );
+
+  const handleQuickSlept = useCallback(
+    async (hotel: (typeof mockHotels)[0]) => {
+      const hotelId = await ensureHotelInDb(hotel);
+      router.push(`/rating/${hotelId}`);
+    },
+    [ensureHotelInDb, router]
   );
 
   return (
@@ -60,24 +81,52 @@ export default function SearchScreen() {
         <View style={styles.header}>
           <View style={styles.headerRow}>
             <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
-              <Ionicons name="close" size={24} color={Colors.text} />
+              <Ionicons name="close" size={22} color={Colors.text} />
             </TouchableOpacity>
-            <Text style={styles.title}>Search Hotels</Text>
+            <Text style={styles.title}>Search</Text>
           </View>
-          <SearchBar value={query} onChangeText={setQuery} autoFocus placeholder="Hotel name, city, or country..." />
+          <SearchBar
+            value={query}
+            onChangeText={setQuery}
+            autoFocus
+            placeholder="Where do you want to go?"
+          />
         </View>
 
         <FlatList
           data={filteredResults}
           keyExtractor={(item) => item.name}
           renderItem={({ item }) => (
-            <HotelListItem
-              name={item.name}
-              city={item.city}
-              country={item.country}
-              priceLevel={item.priceLevel}
+            <TouchableOpacity
+              style={styles.resultItem}
               onPress={() => handleSelectHotel(item)}
-            />
+              activeOpacity={0.7}
+            >
+              <View style={styles.resultInfo}>
+                <Text style={styles.resultName} numberOfLines={1}>
+                  {item.name}
+                </Text>
+                <Text style={styles.resultLocation}>
+                  {item.city}, {item.country}
+                </Text>
+              </View>
+              <View style={styles.quickActions}>
+                <TouchableOpacity
+                  style={styles.quickAction}
+                  onPress={() => handleQuickSave(item)}
+                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                >
+                  <Ionicons name="star-outline" size={18} color={Colors.textSecondary} />
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.quickAction}
+                  onPress={() => handleQuickSlept(item)}
+                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                >
+                  <Ionicons name="bed-outline" size={18} color={Colors.textSecondary} />
+                </TouchableOpacity>
+              </View>
+            </TouchableOpacity>
           )}
           ListFooterComponent={
             query.length >= 2 ? (
@@ -86,7 +135,7 @@ export default function SearchScreen() {
                 onPress={() => router.push(`/add-hotel?name=${encodeURIComponent(query)}`)}
                 activeOpacity={0.7}
               >
-                <Ionicons name="add-circle-outline" size={20} color={Colors.accent} />
+                <Ionicons name="add-circle-outline" size={18} color={Colors.accent} />
                 <Text style={styles.addText}>Add "{query}" manually</Text>
               </TouchableOpacity>
             ) : null
@@ -99,8 +148,8 @@ export default function SearchScreen() {
               </View>
             ) : (
               <View style={styles.emptyContainer}>
-                <Ionicons name="search" size={40} color={Colors.textLight} />
-                <Text style={styles.emptyText}>Search for a hotel</Text>
+                <Ionicons name="search" size={36} color={Colors.textLight} />
+                <Text style={styles.emptyText}>Find your next stay</Text>
                 <Text style={styles.emptySubtext}>Type at least 2 characters to search</Text>
               </View>
             )
@@ -123,9 +172,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: Layout.padding,
     paddingTop: 12,
     paddingBottom: 12,
-    backgroundColor: Colors.white,
-    borderBottomWidth: 1,
-    borderBottomColor: Colors.border,
   },
   headerRow: {
     flexDirection: 'row',
@@ -137,20 +183,45 @@ const styles = StyleSheet.create({
     padding: 4,
   },
   title: {
-    fontSize: 18,
-    fontWeight: '600',
+    ...Typography.heading3,
     color: Colors.text,
+  },
+  resultItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: Layout.padding,
+    paddingVertical: 14,
+  },
+  resultInfo: {
+    flex: 1,
+  },
+  resultName: {
+    fontSize: Typography.body.fontSize,
+    fontWeight: '600',
+    fontFamily: Typography.heading3.fontFamily,
+    color: Colors.text,
+  },
+  resultLocation: {
+    fontSize: Typography.caption.fontSize,
+    color: Colors.textSecondary,
+    marginTop: 1,
+  },
+  quickActions: {
+    flexDirection: 'row',
+    gap: 16,
+    marginLeft: 12,
+  },
+  quickAction: {
+    padding: 4,
   },
   addButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 16,
+    paddingHorizontal: Layout.padding,
     paddingVertical: 16,
-    borderTopWidth: 1,
-    borderTopColor: Colors.borderLight,
   },
   addText: {
-    fontSize: 15,
+    fontSize: Typography.body.fontSize,
     color: Colors.accent,
     fontWeight: '600',
     marginLeft: 8,
@@ -160,13 +231,13 @@ const styles = StyleSheet.create({
     paddingVertical: 60,
   },
   emptyText: {
-    fontSize: 16,
+    fontSize: Typography.body.fontSize,
     fontWeight: '600',
     color: Colors.textSecondary,
     marginTop: 12,
   },
   emptySubtext: {
-    fontSize: 13,
+    fontSize: Typography.caption.fontSize,
     color: Colors.textLight,
     marginTop: 4,
   },

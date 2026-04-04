@@ -15,8 +15,8 @@ import { Layout } from '../../src/constants/layout';
 import { Typography } from '../../src/constants/typography';
 import { TagChip } from '../../src/components/TagChip';
 import { createDb } from '../../src/db/client';
-import { getUser, getProfileStats } from '../../src/dal/user';
-import type { ProfileStats } from '../../src/types';
+import { getUser, getProfileStats, getPassportBadges } from '../../src/dal/user';
+import type { ProfileStats, PassportBadge } from '../../src/types';
 
 interface UserData {
   name: string;
@@ -32,6 +32,7 @@ export default function ProfileScreen() {
   const db = createDb(sqlite);
   const [user, setUser] = useState<UserData | null>(null);
   const [stats, setStats] = useState<ProfileStats | null>(null);
+  const [badges, setBadges] = useState<PassportBadge[]>([]);
 
   const loadProfile = useCallback(async () => {
     const userData = await getUser(db);
@@ -46,6 +47,8 @@ export default function ProfileScreen() {
     }
     const profileStats = await getProfileStats(db, 1);
     setStats(profileStats);
+    const passportBadges = await getPassportBadges(db, 1);
+    setBadges(passportBadges);
   }, []);
 
   useFocusEffect(
@@ -59,12 +62,12 @@ export default function ProfileScreen() {
   return (
     <SafeAreaView style={styles.safe}>
       <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
-        {/* Header */}
+        {/* Header — centered */}
         <View style={styles.header}>
           <View style={styles.avatar}>
             <Ionicons name="person" size={32} color={Colors.textLight} />
           </View>
-          <Text style={styles.name}>{user?.name ?? 'Traveler'}</Text>
+          <Text style={styles.name}>{user?.name ?? 'Curator'}</Text>
           {user?.bio ? (
             <Text style={styles.bio}>{user.bio}</Text>
           ) : null}
@@ -73,15 +76,18 @@ export default function ProfileScreen() {
           )}
         </View>
 
-        {/* Stats inline */}
+        {/* Stats inline — centered */}
         {stats && !isEmpty && (
           <View style={styles.statsSection}>
             <Text style={styles.statsLine}>
-              <Text style={styles.statNumber}>{stats.hotelsSlept}</Text> slept
+              <Text style={styles.statNumber}>{stats.hotelsSlept}</Text>
+              <Text style={styles.statLabel}> slept</Text>
               {'  \u00B7  '}
-              <Text style={styles.statNumber}>{stats.hotelsSaved}</Text> saved
+              <Text style={styles.statNumber}>{stats.hotelsSaved}</Text>
+              <Text style={styles.statLabel}> saved</Text>
               {'  \u00B7  '}
-              <Text style={styles.statNumber}>{stats.countriesVisited}</Text> countries
+              <Text style={styles.statNumber}>{stats.citiesVisited}</Text>
+              <Text style={styles.statLabel}> cities</Text>
             </Text>
           </View>
         )}
@@ -111,6 +117,21 @@ export default function ProfileScreen() {
                 </Text>
               </View>
             ))}
+          </View>
+        )}
+
+        {/* Passport */}
+        {badges.length > 0 && (
+          <View style={styles.section}>
+            <Text style={styles.editorialLabel}>PASSPORT</Text>
+            <View style={styles.badgeGrid}>
+              {badges.map((badge, i) => (
+                <View key={i} style={styles.badgeCard}>
+                  <Text style={styles.badgeTitle}>{badge.title}</Text>
+                  <Text style={styles.badgeSubtitle}>{badge.subtitle}</Text>
+                </View>
+              ))}
+            </View>
           </View>
         )}
 
@@ -146,8 +167,9 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   header: {
+    alignItems: 'center',
     paddingHorizontal: Layout.padding,
-    paddingTop: 20,
+    paddingTop: 24,
     paddingBottom: 16,
   },
   avatar: {
@@ -162,12 +184,14 @@ const styles = StyleSheet.create({
   name: {
     ...Typography.heading1,
     color: Colors.text,
+    textAlign: 'center',
   },
   bio: {
     fontSize: Typography.body.fontSize,
     color: Colors.textSecondary,
     marginTop: 4,
     lineHeight: 22,
+    textAlign: 'center',
   },
   location: {
     fontSize: Typography.caption.fontSize,
@@ -175,16 +199,21 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
   statsSection: {
+    alignItems: 'center',
     paddingHorizontal: Layout.padding,
     paddingBottom: 8,
   },
   statsLine: {
     fontSize: Typography.body.fontSize,
-    color: Colors.textSecondary,
   },
   statNumber: {
+    fontSize: 17,
     fontWeight: '700',
     color: Colors.accent,
+  },
+  statLabel: {
+    fontSize: Typography.body.fontSize,
+    color: Colors.textSecondary,
   },
   section: {
     paddingHorizontal: Layout.padding,
@@ -208,7 +237,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingVertical: 10,
+    paddingVertical: 12,
   },
   cityName: {
     fontSize: Typography.body.fontSize,
@@ -217,6 +246,31 @@ const styles = StyleSheet.create({
   },
   cityCount: {
     fontSize: Typography.caption.fontSize,
+    color: Colors.textSecondary,
+  },
+  badgeGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 10,
+  },
+  badgeCard: {
+    borderWidth: 1,
+    borderColor: 'rgba(0,0,0,0.04)',
+    borderRadius: Layout.borderRadius,
+    backgroundColor: Colors.white,
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    minWidth: '45%',
+    flexGrow: 1,
+  },
+  badgeTitle: {
+    fontSize: Typography.caption.fontSize,
+    fontWeight: '600',
+    color: Colors.text,
+    marginBottom: 2,
+  },
+  badgeSubtitle: {
+    fontSize: Typography.small.fontSize,
     color: Colors.textSecondary,
   },
   emptySection: {

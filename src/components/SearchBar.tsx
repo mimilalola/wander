@@ -17,7 +17,7 @@ export function SearchBar({
   value,
   onChangeText,
   onPress,
-  placeholder = 'Search hotels...',
+  placeholder = 'Where do you want to go?',
   autoFocus = false,
   editable = true,
 }: SearchBarProps) {

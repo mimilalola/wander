@@ -1,7 +1,7 @@
 import { eq, sql } from 'drizzle-orm';
 import { type Database } from '../db/client';
 import * as schema from '../db/schema';
-import type { ProfileStats } from '../types';
+import type { ProfileStats, PassportBadge } from '../types';
 
 const DEFAULT_USER_ID = 1;
 
@@ -45,6 +45,12 @@ export async function getProfileStats(db: Database, userId: number): Promise<Pro
     .orderBy(sql`COUNT(*) DESC`)
     .limit(5);
 
+  const citiesResult = await db
+    .select({ count: sql<number>`COUNT(DISTINCT ${schema.hotels.city})` })
+    .from(schema.visits)
+    .innerJoin(schema.hotels, eq(schema.visits.hotelId, schema.hotels.id))
+    .where(eq(schema.visits.userId, userId));
+
   const countriesResult = await db
     .select({ count: sql<number>`COUNT(DISTINCT ${schema.hotels.country})` })
     .from(schema.visits)
@@ -64,10 +70,8 @@ export async function getProfileStats(db: Database, userId: number): Promise<Pro
     .orderBy(sql`COUNT(*) DESC`)
     .limit(5);
 
-  // Build taste summary from top 3 tags
   const tasteWords = topTags.slice(0, 3).map((t) => {
-    const word = t.tag.charAt(0).toUpperCase() + t.tag.slice(1);
-    return word;
+    return t.tag.charAt(0).toUpperCase() + t.tag.slice(1);
   });
   const tasteSummary = tasteWords.length > 0
     ? `Mostly ${tasteWords.join(' \u00B7 ')}`
@@ -80,6 +84,55 @@ export async function getProfileStats(db: Database, userId: number): Promise<Pro
     topCities,
     topTags,
     countriesVisited: countriesResult[0]?.count ?? 0,
+    citiesVisited: citiesResult[0]?.count ?? 0,
     tasteSummary,
   };
+}
+
+export async function getPassportBadges(db: Database, userId: number): Promise<PassportBadge[]> {
+  const badges: PassportBadge[] = [];
+
+  const stats = await getProfileStats(db, userId);
+
+  // City-specific badges
+  for (const city of stats.topCities) {
+    if (city.count >= 1) {
+      badges.push({ title: `${city.city} unlocked`, subtitle: `${city.count} hotel${city.count !== 1 ? 's' : ''} stayed` });
+    }
+  }
+
+  // Country curator
+  const countries = await db
+    .select({
+      country: schema.hotels.country,
+      count: sql<number>`COUNT(DISTINCT ${schema.hotels.id})`,
+    })
+    .from(schema.visits)
+    .innerJoin(schema.hotels, eq(schema.visits.hotelId, schema.hotels.id))
+    .where(eq(schema.visits.userId, userId))
+    .groupBy(schema.hotels.country)
+    .orderBy(sql`COUNT(DISTINCT ${schema.hotels.id}) DESC`);
+
+  for (const c of countries) {
+    if (c.count >= 2) {
+      badges.push({ title: `${c.country} Curator`, subtitle: `${c.count} hotels rated` });
+    }
+  }
+
+  // Total nights
+  const nightsResult = await db
+    .select({ total: sql<number>`COALESCE(SUM(${schema.visits.nights}), 0)` })
+    .from(schema.visits)
+    .where(eq(schema.visits.userId, userId));
+  const totalNights = nightsResult[0]?.total ?? 0;
+  if (totalNights >= 2) {
+    badges.push({ title: `${totalNights} nights stayed`, subtitle: 'Across all hotels' });
+  }
+
+  // Nomad badge
+  if (stats.countriesVisited >= 3) {
+    badges.push({ title: 'Nomad', subtitle: `${stats.countriesVisited} countries explored` });
+  }
+
+  return badges;
 }

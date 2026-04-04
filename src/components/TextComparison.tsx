@@ -14,61 +14,58 @@ export function TextComparison({ hotelA, hotelB, onChoose }: TextComparisonProps
   return (
     <View style={styles.container}>
       <Text style={styles.question}>
-        Is <Text style={styles.hotelName}>{hotelA}</Text> better than{' '}
-        <Text style={styles.hotelName}>{hotelB}</Text>?
+        Did you prefer
       </Text>
-      <View style={styles.buttons}>
-        <TouchableOpacity
-          style={styles.button}
-          onPress={() => onChoose('a')}
-          activeOpacity={0.7}
-        >
-          <Text style={styles.buttonText}>Yes</Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={styles.button}
-          onPress={() => onChoose('b')}
-          activeOpacity={0.7}
-        >
-          <Text style={styles.buttonText}>No</Text>
-        </TouchableOpacity>
-      </View>
+
+      <TouchableOpacity
+        style={styles.hotelOption}
+        onPress={() => onChoose('a')}
+        activeOpacity={0.7}
+      >
+        <Text style={styles.hotelName}>{hotelA}</Text>
+      </TouchableOpacity>
+
+      <Text style={styles.orText}>or</Text>
+
+      <TouchableOpacity
+        style={styles.hotelOption}
+        onPress={() => onChoose('b')}
+        activeOpacity={0.7}
+      >
+        <Text style={styles.hotelName}>{hotelB}</Text>
+      </TouchableOpacity>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
-    paddingVertical: 24,
-    paddingHorizontal: Layout.padding,
+    paddingVertical: 32,
     alignItems: 'center',
   },
   question: {
-    fontSize: Typography.heading3.fontSize,
-    fontFamily: Typography.heading3.fontFamily,
-    color: Colors.text,
-    textAlign: 'center',
-    lineHeight: 28,
-    marginBottom: 32,
+    fontSize: Typography.body.fontSize,
+    color: Colors.textSecondary,
+    marginBottom: 28,
+  },
+  hotelOption: {
+    width: '100%',
+    paddingVertical: 20,
+    paddingHorizontal: 24,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    borderRadius: Layout.borderRadius,
+    backgroundColor: Colors.white,
+    alignItems: 'center',
   },
   hotelName: {
-    color: Colors.accent,
-    fontWeight: '600',
+    ...Typography.heading3,
+    color: Colors.text,
+    textAlign: 'center',
   },
-  buttons: {
-    flexDirection: 'row',
-    gap: 24,
-  },
-  button: {
-    paddingVertical: 12,
-    paddingHorizontal: 32,
-    borderWidth: 1,
-    borderColor: Colors.accent,
-    borderRadius: Layout.borderRadius,
-  },
-  buttonText: {
+  orText: {
     fontSize: Typography.body.fontSize,
-    fontWeight: '600',
-    color: Colors.accent,
+    color: Colors.textLight,
+    marginVertical: 16,
   },
 });

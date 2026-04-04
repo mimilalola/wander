@@ -294,7 +294,7 @@ const styles = StyleSheet.create({
   savedItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 12,
+    paddingVertical: 14,
     gap: 12,
   },
   savedInfo: {

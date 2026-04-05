@@ -64,7 +64,7 @@ export default function SearchScreen() {
             </TouchableOpacity>
             <Text style={styles.title}>Search Hotels</Text>
           </View>
-          <SearchBar value={query} onChangeText={setQuery} autoFocus placeholder="Hotel name, city, or country..." />
+          <SearchBar   value={query}   onChangeText={setQuery}   autoFocus   placeholder="Where's your next adventure?" />
         </View>
 
         <FlatList

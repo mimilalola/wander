@@ -3,16 +3,13 @@ import {
   View,
   Text,
   StyleSheet,
-  FlatList,
+  ScrollView,
   SafeAreaView,
   TouchableOpacity,
   Alert,
   Animated,
   PanResponder,
   Modal,
-  LayoutAnimation,
-  Platform,
-  UIManager,
 } from 'react-native';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { useSQLiteContext } from 'expo-sqlite';
@@ -31,9 +28,7 @@ import * as schema from '../../src/db/schema';
 import { formatEmotion } from '../../src/utils/format';
 import type { SaveStatus, EmotionTier } from '../../src/types';
 
-if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
-  UIManager.setLayoutAnimationEnabledExperimental(true);
-}
+const ROW_HEIGHT = 68;
 
 interface ListHotel {
   id: number;
@@ -148,8 +143,15 @@ export default function ListScreen() {
   const [filter, setFilter] = useState('Slept');
   const [hotels, setHotels] = useState<ListHotel[]>([]);
   const [menuHotel, setMenuHotel] = useState<ListHotel | null>(null);
-  const [dragIndex, setDragIndex] = useState<number | null>(null);
-  const listRef = useRef<FlatList>(null);
+  const [activeDragIdx, setActiveDragIdx] = useState<number | null>(null);
+  const dragAnimY = useRef(new Animated.Value(0)).current;
+  const dragRefs = useRef({
+    isDragging: false,
+    startIdx: 0,
+    currentIdx: 0,
+    swapOffset: 0,
+    list: [] as ListHotel[],
+  });
 
   const loadHotels = useCallback(async () => {
     const results = await db
@@ -235,159 +237,197 @@ export default function ListScreen() {
     .sort((a, b) => (b.rating ?? 0) - (a.rating ?? 0));
 
   const savedHotels = hotels.filter((h) => h.saveStatus === 'want');
-  const filtered = filter === 'Slept' ? sleptHotels : savedHotels;
 
-  const handleLongPress = (index: number) => {
-    if (dragIndex !== null) {
-      setDragIndex(null);
-      return;
-    }
-    setDragIndex(index);
+  // Drag-to-reorder PanResponder
+  const dragResponder = useRef(
+    PanResponder.create({
+      onMoveShouldSetPanResponderCapture: (_, gs) => {
+        return dragRefs.current.isDragging && Math.abs(gs.dy) > 2;
+      },
+      onPanResponderMove: (_, gs) => {
+        const refs = dragRefs.current;
+        if (!refs.isDragging) return;
+
+        dragAnimY.setValue(gs.dy + refs.swapOffset);
+
+        const targetIdx = refs.startIdx + Math.round(gs.dy / ROW_HEIGHT);
+        const clamped = Math.max(0, Math.min(targetIdx, refs.list.length - 1));
+
+        if (clamped !== refs.currentIdx) {
+          const newList = [...refs.list];
+          const [item] = newList.splice(refs.currentIdx, 1);
+          newList.splice(clamped, 0, item);
+          refs.list = newList;
+          refs.swapOffset -= (clamped - refs.currentIdx) * ROW_HEIGHT;
+          dragAnimY.setValue(gs.dy + refs.swapOffset);
+          refs.currentIdx = clamped;
+
+          setActiveDragIdx(clamped);
+          setHotels((prev) => {
+            const nonSlept = prev.filter((h) => h.saveStatus !== 'been');
+            return [...nonSlept, ...newList];
+          });
+        }
+      },
+      onPanResponderRelease: () => {
+        const refs = dragRefs.current;
+        if (!refs.isDragging) return;
+        refs.isDragging = false;
+
+        Animated.spring(dragAnimY, {
+          toValue: 0,
+          friction: 8,
+          useNativeDriver: true,
+        }).start(() => {
+          setActiveDragIdx(null);
+          dragRefs.current.swapOffset = 0;
+        });
+      },
+      onPanResponderTerminate: () => {
+        dragRefs.current.isDragging = false;
+        dragRefs.current.swapOffset = 0;
+        dragAnimY.setValue(0);
+        setActiveDragIdx(null);
+      },
+    })
+  ).current;
+
+  const handleDragStart = (index: number) => {
+    if (activeDragIdx !== null) return;
+    dragRefs.current = {
+      isDragging: true,
+      startIdx: index,
+      currentIdx: index,
+      swapOffset: 0,
+      list: [...sleptHotels],
+    };
+    dragAnimY.setValue(0);
+    setActiveDragIdx(index);
   };
-
-  const moveDragItem = (direction: 'up' | 'down') => {
-    if (dragIndex === null) return;
-    const list = [...sleptHotels];
-    const targetIndex = direction === 'up' ? dragIndex - 1 : dragIndex + 1;
-    if (targetIndex < 0 || targetIndex >= list.length) return;
-
-    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
-    const [item] = list.splice(dragIndex, 1);
-    list.splice(targetIndex, 0, item);
-
-    setHotels((prev) => {
-      const nonSlept = prev.filter((h) => h.saveStatus !== 'been');
-      return [...nonSlept, ...list];
-    });
-    setDragIndex(targetIndex);
-  };
-
-  const renderSleptItem = ({ item, index }: { item: ListHotel; index: number }) => {
-    const isDragging = dragIndex === index;
-    return (
-      <SwipeableRow
-        onDelete={() => handleDelete(item)}
-        onTap={() => {
-          if (dragIndex !== null) {
-            setDragIndex(null);
-          } else {
-            router.push(`/hotel/${item.id}`);
-          }
-        }}
-        onLongPress={() => handleLongPress(index)}
-      >
-        <View style={[
-          styles.sleptItem,
-          isDragging && styles.sleptItemDragging,
-        ]}>
-          {isDragging ? (
-            <View style={styles.dragControls}>
-              <TouchableOpacity
-                onPress={() => moveDragItem('up')}
-                disabled={index === 0}
-                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-              >
-                <Ionicons
-                  name="chevron-up"
-                  size={20}
-                  color={index === 0 ? Colors.borderLight : Colors.accent}
-                />
-              </TouchableOpacity>
-              <TouchableOpacity
-                onPress={() => moveDragItem('down')}
-                disabled={index === sleptHotels.length - 1}
-                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-              >
-                <Ionicons
-                  name="chevron-down"
-                  size={20}
-                  color={index === sleptHotels.length - 1 ? Colors.borderLight : Colors.accent}
-                />
-              </TouchableOpacity>
-            </View>
-          ) : (
-            <Text style={styles.rank}>{index + 1}</Text>
-          )}
-          <View style={styles.sleptInfo}>
-            <Text style={styles.hotelName} numberOfLines={1}>{item.name}</Text>
-            <Text style={styles.hotelLocation}>
-              {item.city}, {item.country}
-              {item.emotion ? ` \u00B7 ${formatEmotion(item.emotion)}` : ''}
-            </Text>
-          </View>
-          <RatingStamp score={item.rating} size="small" />
-          {dragIndex === null && (
-            <TouchableOpacity
-              style={styles.menuButton}
-              onPress={() => setMenuHotel(item)}
-              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-            >
-              <Ionicons name="ellipsis-vertical" size={16} color={Colors.textLight} />
-            </TouchableOpacity>
-          )}
-        </View>
-      </SwipeableRow>
-    );
-  };
-
-  const renderSavedItem = ({ item }: { item: ListHotel }) => (
-    <SwipeableRow
-      onDelete={() => handleDelete(item)}
-      onTap={() => router.push(`/hotel/${item.id}`)}
-    >
-      <View style={styles.savedItem}>
-        <Ionicons name="star" size={16} color={Colors.accent} />
-        <View style={styles.savedInfo}>
-          <Text style={styles.hotelName} numberOfLines={1}>{item.name}</Text>
-          <Text style={styles.hotelLocation}>{item.city}, {item.country}</Text>
-        </View>
-      </View>
-    </SwipeableRow>
-  );
 
   return (
     <SafeAreaView style={styles.safe}>
       <View style={styles.container}>
         <View style={styles.header}>
           <Text style={styles.title}>My List</Text>
-          {dragIndex !== null && (
-            <TouchableOpacity
-              onPress={() => setDragIndex(null)}
-              activeOpacity={0.7}
-            >
-              <Text style={styles.doneButton}>Done</Text>
-            </TouchableOpacity>
-          )}
         </View>
 
         <View style={styles.segmentContainer}>
           <SegmentControl
             options={['Slept', 'Saved']}
             selected={filter}
-            onChange={(val) => { setFilter(val); setDragIndex(null); }}
+            onChange={(val) => {
+              setFilter(val);
+              setActiveDragIdx(null);
+              dragRefs.current.isDragging = false;
+            }}
           />
         </View>
 
-        <FlatList
-          ref={listRef}
-          data={filtered}
-          keyExtractor={(item) => item.id.toString()}
+        <ScrollView
+          style={styles.scrollArea}
           contentContainerStyle={styles.listContent}
-          renderItem={filter === 'Slept' ? renderSleptItem : renderSavedItem}
-          extraData={dragIndex}
-          ListEmptyComponent={
+          scrollEnabled={activeDragIdx === null}
+          showsVerticalScrollIndicator={false}
+        >
+          {filter === 'Slept' ? (
+            sleptHotels.length > 0 ? (
+              sleptHotels.map((item, index) => {
+                const isDragging = activeDragIdx === index;
+                return (
+                  <Animated.View
+                    key={item.id}
+                    style={[
+                      isDragging && {
+                        transform: [{ translateY: dragAnimY }],
+                        zIndex: 999,
+                        elevation: 10,
+                      },
+                    ]}
+                    {...dragResponder.panHandlers}
+                  >
+                    <SwipeableRow
+                      onDelete={() => handleDelete(item)}
+                      onTap={() => {
+                        if (activeDragIdx !== null) return;
+                        router.push(`/hotel/${item.id}`);
+                      }}
+                      onLongPress={() => handleDragStart(index)}
+                    >
+                      <View
+                        style={[
+                          styles.sleptItem,
+                          isDragging && styles.sleptItemDragging,
+                        ]}
+                      >
+                        <Text style={styles.rank}>{index + 1}</Text>
+                        <View style={styles.sleptInfo}>
+                          <Text style={styles.hotelName} numberOfLines={1}>
+                            {item.name}
+                          </Text>
+                          <Text style={styles.hotelLocation}>
+                            {item.city}, {item.country}
+                            {item.emotion
+                              ? ` \u00B7 ${formatEmotion(item.emotion)}`
+                              : ''}
+                          </Text>
+                        </View>
+                        <RatingStamp score={item.rating} size="small" />
+                        {!isDragging && (
+                          <TouchableOpacity
+                            style={styles.menuButton}
+                            onPress={() => setMenuHotel(item)}
+                            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                          >
+                            <Ionicons
+                              name="ellipsis-vertical"
+                              size={16}
+                              color={Colors.textLight}
+                            />
+                          </TouchableOpacity>
+                        )}
+                      </View>
+                    </SwipeableRow>
+                  </Animated.View>
+                );
+              })
+            ) : (
+              <EmptyState
+                icon="bed-outline"
+                message="No hotels rated yet"
+                actionLabel="Search Hotels"
+                onAction={() => router.push('/search')}
+              />
+            )
+          ) : savedHotels.length > 0 ? (
+            savedHotels.map((item) => (
+              <SwipeableRow
+                key={item.id}
+                onDelete={() => handleDelete(item)}
+                onTap={() => router.push(`/hotel/${item.id}`)}
+              >
+                <View style={styles.savedItem}>
+                  <Ionicons name="star" size={16} color={Colors.accent} />
+                  <View style={styles.savedInfo}>
+                    <Text style={styles.hotelName} numberOfLines={1}>
+                      {item.name}
+                    </Text>
+                    <Text style={styles.hotelLocation}>
+                      {item.city}, {item.country}
+                    </Text>
+                  </View>
+                </View>
+              </SwipeableRow>
+            ))
+          ) : (
             <EmptyState
-              icon={filter === 'Slept' ? 'bed-outline' : 'star-outline'}
-              message={
-                filter === 'Slept'
-                  ? 'No hotels rated yet'
-                  : 'No hotels saved yet'
-              }
+              icon="star-outline"
+              message="No hotels saved yet"
               actionLabel="Search Hotels"
               onAction={() => router.push('/search')}
             />
-          }
-        />
+          )}
+        </ScrollView>
       </View>
 
       {/* 3-dot menu modal */}
@@ -398,20 +438,40 @@ export default function ListScreen() {
           onPress={() => setMenuHotel(null)}
         >
           <View style={styles.menuSheet}>
-            <Text style={styles.menuTitle} numberOfLines={1}>{menuHotel?.name}</Text>
-            <TouchableOpacity style={styles.menuItem} onPress={() => handleMenuAction('edit')}>
+            <Text style={styles.menuTitle} numberOfLines={1}>
+              {menuHotel?.name}
+            </Text>
+            <TouchableOpacity
+              style={styles.menuItem}
+              onPress={() => handleMenuAction('edit')}
+              activeOpacity={0.7}
+            >
               <Ionicons name="create-outline" size={18} color={Colors.text} />
               <Text style={styles.menuItemText}>Edit ranking</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={styles.menuItem} onPress={() => handleMenuAction('newStay')}>
+            <TouchableOpacity
+              style={styles.menuItem}
+              onPress={() => handleMenuAction('newStay')}
+              activeOpacity={0.7}
+            >
               <Ionicons name="add-outline" size={18} color={Colors.text} />
               <Text style={styles.menuItemText}>Add new stay</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={styles.menuItem} onPress={() => handleMenuAction('delete')}>
+            <TouchableOpacity
+              style={styles.menuItem}
+              onPress={() => handleMenuAction('delete')}
+              activeOpacity={0.7}
+            >
               <Ionicons name="trash-outline" size={18} color={Colors.accent} />
-              <Text style={[styles.menuItemText, { color: Colors.accent }]}>Delete</Text>
+              <Text style={[styles.menuItemText, { color: Colors.accent }]}>
+                Delete
+              </Text>
             </TouchableOpacity>
-            <TouchableOpacity style={styles.menuCancel} onPress={() => setMenuHotel(null)}>
+            <TouchableOpacity
+              style={styles.menuCancel}
+              onPress={() => setMenuHotel(null)}
+              activeOpacity={0.7}
+            >
               <Text style={styles.menuCancelText}>Cancel</Text>
             </TouchableOpacity>
           </View>
@@ -430,9 +490,6 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
     paddingHorizontal: Layout.padding,
     paddingTop: 12,
     paddingBottom: 12,
@@ -441,14 +498,12 @@ const styles = StyleSheet.create({
     ...Typography.heading1,
     color: Colors.text,
   },
-  doneButton: {
-    fontSize: Typography.body.fontSize,
-    fontWeight: '600',
-    color: Colors.accent,
-  },
   segmentContainer: {
     paddingHorizontal: Layout.padding,
     marginBottom: 8,
+  },
+  scrollArea: {
+    flex: 1,
   },
   listContent: {
     paddingHorizontal: Layout.padding,
@@ -466,10 +521,10 @@ const styles = StyleSheet.create({
     marginHorizontal: -4,
     paddingHorizontal: 4,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.08,
-    shadowRadius: 8,
-    elevation: 3,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.12,
+    shadowRadius: 12,
+    elevation: 6,
   },
   rank: {
     width: 24,
@@ -477,11 +532,6 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: Colors.textSecondary,
     textAlign: 'center',
-  },
-  dragControls: {
-    width: 24,
-    alignItems: 'center',
-    gap: 2,
   },
   sleptInfo: {
     flex: 1,

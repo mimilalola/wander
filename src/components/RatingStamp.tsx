@@ -43,6 +43,10 @@ export function RatingStamp({ score, size = 'default', animated = false }: Ratin
   if (score === null) return null;
 
   const s = SIZES[size];
+  // Deterministic irregularity from score
+  const seedVal = Math.round(score * 10);
+  const rotation = -1.2 - (seedVal % 7) * 0.3; // -1.2 to -3.0 deg
+  const scoreOpacity = 0.85 + (seedVal % 4) * 0.03; // 0.85 to 0.94
 
   return (
     <Animated.View
@@ -53,7 +57,7 @@ export function RatingStamp({ score, size = 'default', animated = false }: Ratin
           height: s.box,
           borderRadius: s.box / 2,
           borderWidth: s.borderWidth,
-          transform: [{ rotate: '-2deg' }, { scale: scaleAnim }],
+          transform: [{ rotate: `${rotation}deg` }, { scale: scaleAnim }],
           opacity: fadeAnim,
         },
       ]}
@@ -64,6 +68,7 @@ export function RatingStamp({ score, size = 'default', animated = false }: Ratin
           {
             fontSize: s.fontSize,
             fontFamily: Typography.heading1.fontFamily,
+            opacity: scoreOpacity,
           },
         ]}
       >
@@ -83,6 +88,5 @@ const styles = StyleSheet.create({
   score: {
     color: Colors.accent,
     fontWeight: '700',
-    opacity: 0.9,
   },
 });

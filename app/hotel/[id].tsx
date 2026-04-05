@@ -387,7 +387,7 @@ const styles = StyleSheet.create({
   actionsSection: {
     flexDirection: 'row',
     paddingHorizontal: Layout.padding,
-    paddingVertical: 10,
+    paddingVertical: 8,
     gap: 12,
   },
   actionButton: {
@@ -416,7 +416,7 @@ const styles = StyleSheet.create({
   },
   section: {
     paddingHorizontal: Layout.padding,
-    paddingTop: 24,
+    paddingTop: 18,
   },
   editorialLabel: {
     ...Typography.editorial,

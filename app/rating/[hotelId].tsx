@@ -465,17 +465,14 @@ const styles = StyleSheet.create({
   notesCard: {
     width: '100%',
     borderRadius: Layout.borderRadius,
-    borderWidth: 1,
-    borderColor: 'rgba(0,0,0,0.04)',
-    backgroundColor: Colors.white,
-    marginBottom: 16,
-    paddingHorizontal: 4,
+    backgroundColor: 'rgba(0,0,0,0.02)',
+    marginBottom: 20,
   },
   notesInput: {
     padding: 14,
     fontSize: Typography.body.fontSize,
     color: Colors.text,
-    minHeight: 64,
+    minHeight: 56,
   },
   photosSection: {
     width: '100%',

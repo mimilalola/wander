@@ -81,10 +81,11 @@ export interface ProfileStats {
   hotelsSaved: number;
   hotelsSlept: number;
   averageRating: number | null;
-  topCities: { city: string; count: number }[];
+  topCities: { city: string; country: string; count: number }[];
   topTags: { tag: string; count: number }[];
   countriesVisited: number;
   citiesVisited: number;
+  totalNights: number;
   tasteSummary: string;
 }
 

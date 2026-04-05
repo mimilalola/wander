@@ -76,18 +76,31 @@ export default function ProfileScreen() {
           )}
         </View>
 
-        {/* Stats inline — centered */}
+        {/* Stats inline — centered, tappable */}
         {stats && !isEmpty && (
           <View style={styles.statsSection}>
             <Text style={styles.statsLine}>
-              <Text style={styles.statNumber}>{stats.hotelsSlept}</Text>
-              <Text style={styles.statLabel}> slept</Text>
-              {'  \u00B7  '}
-              <Text style={styles.statNumber}>{stats.hotelsSaved}</Text>
-              <Text style={styles.statLabel}> saved</Text>
-              {'  \u00B7  '}
+              <Text
+                style={styles.statTappable}
+                onPress={() => router.push('/(tabs)/list')}
+              >
+                <Text style={styles.statNumber}>{stats.hotelsSlept}</Text>
+                <Text style={styles.statLabel}> hotels</Text>
+              </Text>
+              {'  \u2022  '}
+              <Text
+                style={styles.statTappable}
+                onPress={() => router.push('/(tabs)/list')}
+              >
+                <Text style={styles.statNumber}>{stats.hotelsSaved}</Text>
+                <Text style={styles.statLabel}> saved</Text>
+              </Text>
+              {'  \u2022  '}
               <Text style={styles.statNumber}>{stats.citiesVisited}</Text>
               <Text style={styles.statLabel}> cities</Text>
+              {'  \u2022  '}
+              <Text style={styles.statNumber}>{stats.totalNights}</Text>
+              <Text style={styles.statLabel}> nights</Text>
             </Text>
           </View>
         )}
@@ -95,7 +108,7 @@ export default function ProfileScreen() {
         {/* Taste Summary */}
         {stats?.tasteSummary ? (
           <View style={styles.section}>
-            <Text style={styles.editorialLabel}>YOUR TASTE</Text>
+            <Text style={styles.editorialLabel}>YOUR TRAVELLER PROFILE</Text>
             <Text style={styles.tasteSummary}>{stats.tasteSummary}</Text>
             <View style={styles.tagsRow}>
               {stats.topTags.map((t) => (
@@ -111,7 +124,10 @@ export default function ProfileScreen() {
             <Text style={styles.editorialLabel}>CITIES</Text>
             {stats.topCities.map((c) => (
               <View key={c.city} style={styles.cityRow}>
-                <Text style={styles.cityName}>{c.city}</Text>
+                <View>
+                  <Text style={styles.cityName}>{c.city}</Text>
+                  <Text style={styles.cityCountry}>{c.country}</Text>
+                </View>
                 <Text style={styles.cityCount}>
                   {c.count} hotel{c.count !== 1 ? 's' : ''}
                 </Text>
@@ -152,7 +168,7 @@ export default function ProfileScreen() {
           </View>
         )}
 
-        <View style={{ height: 40 }} />
+        <View style={{ height: 24 }} />
       </ScrollView>
     </SafeAreaView>
   );
@@ -211,6 +227,9 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: Colors.accent,
   },
+  statTappable: {
+    // tappable stat group
+  },
   statLabel: {
     fontSize: Typography.body.fontSize,
     color: Colors.textSecondary,
@@ -243,6 +262,11 @@ const styles = StyleSheet.create({
     fontSize: Typography.body.fontSize,
     fontWeight: '500',
     color: Colors.text,
+  },
+  cityCountry: {
+    fontSize: Typography.caption.fontSize,
+    color: Colors.textLight,
+    marginTop: 1,
   },
   cityCount: {
     fontSize: Typography.caption.fontSize,

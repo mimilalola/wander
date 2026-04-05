@@ -234,7 +234,7 @@ export default function HotelDetailScreen() {
                   {formatNights(latestVisit.nights)}
                 </Text>
               )}
-              {/* Notes — behind edit action */}
+              {/* Notes — in card */}
               {editingNotes ? (
                 <View style={styles.notesEditContainer}>
                   <TextInput
@@ -257,7 +257,7 @@ export default function HotelDetailScreen() {
                   </View>
                 </View>
               ) : (
-                <TouchableOpacity onPress={handleEditNotes} style={styles.editNotesButton}>
+                <TouchableOpacity onPress={handleEditNotes} style={styles.notesCard}>
                   {latestVisit.notes ? (
                     <Text style={styles.notes}>{latestVisit.notes}</Text>
                   ) : null}
@@ -266,7 +266,7 @@ export default function HotelDetailScreen() {
                   </Text>
                 </TouchableOpacity>
               )}
-              <Text style={styles.visitDate}>{formatDate(latestVisit.createdAt)}</Text>
+              <Text style={styles.visitDate}>RANKED · {formatDate(latestVisit.createdAt)}</Text>
             </View>
           </View>
         )}
@@ -303,7 +303,7 @@ export default function HotelDetailScreen() {
           </View>
         )}
 
-        <View style={{ height: 40 }} />
+        <View style={{ height: 24 }} />
       </ScrollView>
     </SafeAreaView>
   );
@@ -438,8 +438,13 @@ const styles = StyleSheet.create({
     color: Colors.textSecondary,
     lineHeight: 22,
   },
-  editNotesButton: {
-    marginTop: 4,
+  notesCard: {
+    marginTop: 8,
+    padding: 14,
+    borderRadius: Layout.borderRadius,
+    borderWidth: 1,
+    borderColor: 'rgba(0,0,0,0.04)',
+    backgroundColor: Colors.white,
   },
   editNotesLink: {
     fontSize: Typography.caption.fontSize,
@@ -478,7 +483,8 @@ const styles = StyleSheet.create({
   visitDate: {
     fontSize: Typography.small.fontSize,
     color: Colors.textLight,
-    marginTop: 4,
+    letterSpacing: 1,
+    marginTop: 8,
   },
   visitItem: {
     flexDirection: 'row',

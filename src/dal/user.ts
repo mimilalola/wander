@@ -36,12 +36,13 @@ export async function getProfileStats(db: Database, userId: number): Promise<Pro
   const topCities = await db
     .select({
       city: schema.hotels.city,
+      country: schema.hotels.country,
       count: sql<number>`COUNT(*)`,
     })
     .from(schema.visits)
     .innerJoin(schema.hotels, eq(schema.visits.hotelId, schema.hotels.id))
     .where(eq(schema.visits.userId, userId))
-    .groupBy(schema.hotels.city)
+    .groupBy(schema.hotels.city, schema.hotels.country)
     .orderBy(sql`COUNT(*) DESC`)
     .limit(5);
 
@@ -70,6 +71,12 @@ export async function getProfileStats(db: Database, userId: number): Promise<Pro
     .orderBy(sql`COUNT(*) DESC`)
     .limit(5);
 
+  const nightsResult = await db
+    .select({ total: sql<number>`COALESCE(SUM(${schema.visits.nights}), 0)` })
+    .from(schema.visits)
+    .where(eq(schema.visits.userId, userId));
+  const totalNights = nightsResult[0]?.total ?? 0;
+
   const tasteWords = topTags.slice(0, 3).map((t) => {
     return t.tag.charAt(0).toUpperCase() + t.tag.slice(1);
   });
@@ -85,6 +92,7 @@ export async function getProfileStats(db: Database, userId: number): Promise<Pro
     topTags,
     countriesVisited: countriesResult[0]?.count ?? 0,
     citiesVisited: citiesResult[0]?.count ?? 0,
+    totalNights,
     tasteSummary,
   };
 }

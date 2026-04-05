@@ -188,7 +188,7 @@ export default function ReceptionScreen() {
                     onPress={() => router.push(`/hotel/${hotel.id}`)}
                     activeOpacity={0.7}
                   >
-                    <Ionicons name="star-outline" size={16} color={Colors.textSecondary} />
+                    <Ionicons name="star" size={16} color={Colors.accent} />
                     <View style={styles.savedInfo}>
                       <Text style={styles.savedName} numberOfLines={1}>
                         {hotel.name}
@@ -204,7 +204,7 @@ export default function ReceptionScreen() {
           </>
         )}
 
-        <View style={{ height: 40 }} />
+        <View style={{ height: 24 }} />
       </ScrollView>
     </SafeAreaView>
   );

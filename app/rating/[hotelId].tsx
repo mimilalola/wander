@@ -8,6 +8,8 @@ import {
   TextInput,
   ScrollView,
   Image,
+  KeyboardAvoidingView,
+  Platform,
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSQLiteContext } from 'expo-sqlite';
@@ -121,7 +123,7 @@ export default function RatingScreen() {
     const withNew = [...allRanks.filter((v) => v.rank !== rank), { rank }];
     const score = computeTierScore(rank, withNew, emotionTier);
     setDerivedScore(score);
-    await updateVisitRating(db, visitId, Math.round(score));
+    await updateVisitRating(db, visitId, score);
     return score;
   };
 
@@ -131,8 +133,6 @@ export default function RatingScreen() {
     if (currentIndex <= 0) {
       router.back();
     } else {
-      // Can't go back past emotion once visit is created
-      if (step === 'compare' || step === 'confirm') return;
       setStep(STEPS[currentIndex - 1]);
     }
   };
@@ -238,15 +238,14 @@ export default function RatingScreen() {
 
   const STEPS: Step[] = ['tags', 'nights', 'emotion', 'compare', 'confirm'];
   const stepIndex = STEPS.indexOf(step);
-  const canGoBack = step === 'tags' || step === 'nights' || step === 'emotion';
   const currentComparison = comparisons[compIndex];
 
   return (
     <SafeAreaView style={styles.safe}>
       {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity onPress={canGoBack ? handleBack : () => router.back()} style={styles.headerLeft}>
-          <Ionicons name={canGoBack && step !== 'tags' ? 'arrow-back' : 'close'} size={22} color={Colors.text} />
+        <TouchableOpacity onPress={handleBack} style={styles.headerLeft}>
+          <Ionicons name={step === 'tags' ? 'close' : 'arrow-back'} size={22} color={Colors.text} />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>{hotelName}</Text>
         <View style={styles.headerRight} />
@@ -260,15 +259,19 @@ export default function RatingScreen() {
         </View>
       </View>
 
-      <ScrollView
+      <KeyboardAvoidingView
         style={styles.content}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        keyboardVerticalOffset={80}
+      >
+      <ScrollView
+        style={styles.scrollContent}
         contentContainerStyle={styles.contentInner}
         showsVerticalScrollIndicator={false}
       >
         {step === 'tags' && (
-          <View>
-            <Text style={styles.editorialLabel}>WHAT DEFINED THIS PLACE?</Text>
-            <Text style={styles.stepTitle}>Select tags</Text>
+          <View style={styles.stepCenter}>
+            <Text style={styles.stepTitle}>What defined this stay?</Text>
             <View style={styles.tagsWrap}>
               {allTags.map((tag) => (
                 <TagChip
@@ -283,9 +286,8 @@ export default function RatingScreen() {
         )}
 
         {step === 'nights' && (
-          <View>
-            <Text style={styles.editorialLabel}>YOUR STAY</Text>
-            <Text style={styles.stepTitle}>How many nights?</Text>
+          <View style={styles.stepCenter}>
+            <Text style={styles.stepTitle}>How many nights was your stay?</Text>
             <View style={styles.pickerContainer}>
               <NightsPicker selected={nights} onSelect={setNights} />
             </View>
@@ -293,18 +295,14 @@ export default function RatingScreen() {
         )}
 
         {step === 'emotion' && (
-          <View>
-            <Text style={styles.editorialLabel}>YOUR FEELING</Text>
-            <Text style={styles.stepTitle}>How do you feel about it?</Text>
+          <View style={styles.stepCenter}>
+            <Text style={styles.stepTitle}>Your feeling</Text>
             <EmotionPicker selected={emotion} onSelect={setEmotion} />
           </View>
         )}
 
         {step === 'compare' && currentComparison && (
-          <View>
-            <Text style={styles.editorialLabel}>
-              COMPARE {compIndex + 1} OF {comparisons.length}
-            </Text>
+          <View style={styles.stepCenter}>
             <TextComparison
               hotelA={hotelName}
               hotelB={currentComparison.hotel.name}
@@ -351,6 +349,7 @@ export default function RatingScreen() {
           </View>
         )}
       </ScrollView>
+      </KeyboardAvoidingView>
 
       {/* Footer */}
       <View style={styles.footer}>
@@ -422,18 +421,23 @@ const styles = StyleSheet.create({
   content: {
     flex: 1,
   },
+  scrollContent: {
+    flex: 1,
+  },
   contentInner: {
     padding: Layout.padding,
     paddingTop: 8,
+    flexGrow: 1,
   },
-  editorialLabel: {
-    ...Typography.editorial,
-    color: Colors.textSecondary,
-    marginBottom: 8,
+  stepCenter: {
+    flex: 1,
+    justifyContent: 'center',
+    paddingVertical: 16,
   },
   stepTitle: {
     ...Typography.heading2,
     color: Colors.text,
+    textAlign: 'center',
     marginBottom: 28,
   },
   tagsWrap: {
@@ -499,7 +503,7 @@ const styles = StyleSheet.create({
   footer: {
     flexDirection: 'row',
     paddingHorizontal: Layout.padding,
-    paddingVertical: 16,
+    paddingVertical: 12,
     gap: 12,
   },
   skipButton: {

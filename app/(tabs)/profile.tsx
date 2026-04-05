@@ -150,7 +150,9 @@ export default function ProfileScreen() {
             <View style={styles.badgeGrid}>
               {badges.map((badge, i) => (
                 <View key={i} style={styles.badgeCard}>
-                  <View style={styles.badgeStampAccent} />
+                  <View style={styles.sealOuter}>
+                    <View style={styles.sealInner} />
+                  </View>
                   <Text style={styles.badgeTitle}>{badge.title}</Text>
                   <Text style={styles.badgeSubtitle}>{badge.subtitle}</Text>
                 </View>
@@ -303,16 +305,27 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     position: 'relative',
   },
-  badgeStampAccent: {
+  sealOuter: {
     position: 'absolute',
-    top: -6,
-    right: -6,
-    width: 24,
-    height: 24,
-    borderRadius: 12,
+    top: -8,
+    right: -8,
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    borderWidth: 2,
+    borderColor: Colors.accent,
+    opacity: 0.1,
+    transform: [{ rotate: '15deg' }],
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  sealInner: {
+    width: 18,
+    height: 18,
+    borderRadius: 9,
     borderWidth: 1.5,
     borderColor: Colors.accent,
-    opacity: 0.12,
+    opacity: 0.6,
   },
   badgeTitle: {
     fontSize: Typography.caption.fontSize,

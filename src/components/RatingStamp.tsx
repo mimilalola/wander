@@ -1,5 +1,5 @@
 import React, { useEffect, useRef } from 'react';
-import { View, Text, StyleSheet, Animated } from 'react-native';
+import { Text, StyleSheet, Animated } from 'react-native';
 import { Colors } from '../constants/colors';
 import { Typography } from '../constants/typography';
 
@@ -10,29 +10,32 @@ interface RatingStampProps {
 }
 
 const SIZES = {
-  small: { box: 36, fontSize: 14, borderWidth: 1.5 },
-  default: { box: 52, fontSize: 20, borderWidth: 2 },
-  large: { box: 80, fontSize: 30, borderWidth: 2.5 },
+  small: { box: 36, fontSize: 14, borderWidth: 2 },
+  default: { box: 52, fontSize: 20, borderWidth: 2.5 },
+  large: { box: 88, fontSize: 32, borderWidth: 3 },
 };
 
 export function RatingStamp({ score, size = 'default', animated = false }: RatingStampProps) {
   const fadeAnim = useRef(new Animated.Value(animated ? 0 : 1)).current;
-  const scaleAnim = useRef(new Animated.Value(animated ? 0.85 : 1)).current;
+  const scaleAnim = useRef(new Animated.Value(animated ? 0.6 : 1)).current;
 
   useEffect(() => {
     if (animated && score !== null) {
-      Animated.parallel([
-        Animated.timing(fadeAnim, {
-          toValue: 1,
-          duration: 500,
-          useNativeDriver: true,
-        }),
-        Animated.spring(scaleAnim, {
-          toValue: 1,
-          friction: 6,
-          tension: 80,
-          useNativeDriver: true,
-        }),
+      Animated.sequence([
+        Animated.delay(150),
+        Animated.parallel([
+          Animated.timing(fadeAnim, {
+            toValue: 1,
+            duration: 400,
+            useNativeDriver: true,
+          }),
+          Animated.spring(scaleAnim, {
+            toValue: 1,
+            friction: 5,
+            tension: 100,
+            useNativeDriver: true,
+          }),
+        ]),
       ]).start();
     }
   }, [animated, score]);
@@ -80,6 +83,6 @@ const styles = StyleSheet.create({
   score: {
     color: Colors.accent,
     fontWeight: '700',
-    opacity: 0.85,
+    opacity: 0.9,
   },
 });

@@ -362,8 +362,8 @@ const styles = StyleSheet.create({
   },
   infoSection: {
     paddingHorizontal: Layout.padding,
-    paddingTop: 20,
-    paddingBottom: 8,
+    paddingTop: 16,
+    paddingBottom: 4,
   },
   hotelName: {
     ...Typography.heading1,
@@ -381,12 +381,13 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     flexWrap: 'wrap',
     paddingHorizontal: Layout.padding,
-    paddingVertical: 8,
+    paddingTop: 4,
+    paddingBottom: 6,
   },
   actionsSection: {
     flexDirection: 'row',
     paddingHorizontal: Layout.padding,
-    paddingVertical: 16,
+    paddingVertical: 10,
     gap: 12,
   },
   actionButton: {
@@ -497,7 +498,9 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingVertical: 14,
+    paddingVertical: 12,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: 'rgba(0,0,0,0.04)',
   },
   visitItemDate: {
     fontSize: Typography.body.fontSize,

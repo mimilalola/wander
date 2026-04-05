@@ -10,29 +10,43 @@ interface EmotionPickerProps {
   onSelect: (emotion: EmotionTier) => void;
 }
 
-const OPTIONS: { value: EmotionTier; label: string; description: string }[] = [
-  { value: 'loved', label: 'Loved it', description: 'A place I dream about returning to' },
-  { value: 'nice', label: 'It was nice', description: 'Pleasant stay, good memories' },
-  { value: 'wouldnt_return', label: "Wouldn't return", description: "Not for me, but that's okay" },
+const OPTIONS: { value: EmotionTier; label: string }[] = [
+  { value: 'loved', label: 'Loved it' },
+  { value: 'nice', label: 'It was nice' },
+  { value: 'wouldnt_return', label: "Wouldn't return" },
 ];
+
+const TONE_COLORS: Record<EmotionTier, { bg: string; text: string }> = {
+  loved: { bg: 'rgba(110,15,26,0.04)', text: Colors.accent },
+  nice: { bg: 'rgba(0,0,0,0.02)', text: Colors.text },
+  wouldnt_return: { bg: 'rgba(0,0,0,0.015)', text: Colors.textSecondary },
+};
 
 export function EmotionPicker({ selected, onSelect }: EmotionPickerProps) {
   return (
     <View style={styles.container}>
       {OPTIONS.map((option) => {
         const isSelected = selected === option.value;
+        const tone = TONE_COLORS[option.value];
         return (
           <TouchableOpacity
             key={option.value}
-            style={[styles.option, isSelected && styles.optionSelected]}
+            style={[
+              styles.option,
+              { backgroundColor: tone.bg },
+              isSelected && styles.optionSelected,
+            ]}
             onPress={() => onSelect(option.value)}
-            activeOpacity={0.7}
+            activeOpacity={0.8}
           >
-            <Text style={[styles.label, isSelected && styles.labelSelected]}>
+            <Text
+              style={[
+                styles.label,
+                { color: tone.text },
+                isSelected && styles.labelSelected,
+              ]}
+            >
               {option.label}
-            </Text>
-            <Text style={[styles.description, isSelected && styles.descriptionSelected]}>
-              {option.description}
             </Text>
           </TouchableOpacity>
         );
@@ -43,35 +57,26 @@ export function EmotionPicker({ selected, onSelect }: EmotionPickerProps) {
 
 const styles = StyleSheet.create({
   container: {
-    gap: 16,
+    gap: 12,
   },
   option: {
-    borderWidth: 1,
-    borderColor: Colors.border,
+    borderWidth: 1.5,
+    borderColor: 'rgba(0,0,0,0.04)',
     borderRadius: Layout.borderRadius,
-    paddingVertical: 20,
+    paddingVertical: 18,
     paddingHorizontal: 20,
-    backgroundColor: Colors.white,
+    alignItems: 'center',
   },
   optionSelected: {
     borderColor: Colors.accent,
-    backgroundColor: Colors.accentLight,
+    backgroundColor: 'rgba(110,15,26,0.05)',
   },
   label: {
-    fontSize: Typography.body.fontSize,
+    fontSize: 19,
     fontWeight: '600',
-    color: Colors.text,
-    marginBottom: 4,
+    fontFamily: Typography.heading3.fontFamily,
   },
   labelSelected: {
-    color: Colors.accent,
-  },
-  description: {
-    fontSize: Typography.caption.fontSize,
-    color: Colors.textSecondary,
-    lineHeight: 18,
-  },
-  descriptionSelected: {
     color: Colors.accent,
   },
 });

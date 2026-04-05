@@ -318,15 +318,17 @@ export default function RatingScreen() {
             </View>
             <Text style={styles.hotelNameConfirm}>{hotelName}</Text>
 
-            <TextInput
-              style={styles.notesInput}
-              multiline
-              placeholder="Add a note about your stay..."
-              placeholderTextColor={Colors.textLight}
-              value={notes}
-              onChangeText={setNotes}
-              textAlignVertical="top"
-            />
+            <View style={styles.notesCard}>
+              <TextInput
+                style={styles.notesInput}
+                multiline
+                placeholder="Your notes"
+                placeholderTextColor={Colors.textLight}
+                value={notes}
+                onChangeText={setNotes}
+                textAlignVertical="top"
+              />
+            </View>
 
             <View style={styles.photosSection}>
               <ScrollView horizontal showsHorizontalScrollIndicator={false}>
@@ -342,7 +344,7 @@ export default function RatingScreen() {
                   </View>
                 ))}
                 <TouchableOpacity style={styles.addPhotoButton} onPress={handlePickPhotos}>
-                  <Ionicons name="camera-outline" size={22} color={Colors.textSecondary} />
+                  <Ionicons name="camera-outline" size={20} color={Colors.textLight} />
                 </TouchableOpacity>
               </ScrollView>
             </View>
@@ -449,34 +451,38 @@ const styles = StyleSheet.create({
   },
   confirmContainer: {
     alignItems: 'center',
+    paddingTop: 16,
   },
   stampCenter: {
-    marginVertical: 24,
+    marginBottom: 20,
   },
   hotelNameConfirm: {
     ...Typography.heading2,
     color: Colors.text,
     textAlign: 'center',
-    marginBottom: 28,
+    marginBottom: 24,
   },
-  notesInput: {
+  notesCard: {
     width: '100%',
     borderRadius: Layout.borderRadius,
-    padding: 16,
-    fontSize: Typography.body.fontSize,
-    color: Colors.text,
-    minHeight: 80,
     borderWidth: 1,
     borderColor: 'rgba(0,0,0,0.04)',
     backgroundColor: Colors.white,
-    marginBottom: 20,
+    marginBottom: 16,
+    paddingHorizontal: 4,
+  },
+  notesInput: {
+    padding: 14,
+    fontSize: Typography.body.fontSize,
+    color: Colors.text,
+    minHeight: 64,
   },
   photosSection: {
     width: '100%',
   },
   photoThumb: {
-    width: 80,
-    height: 80,
+    width: 64,
+    height: 64,
     borderRadius: Layout.borderRadiusSmall,
     overflow: 'hidden',
     marginRight: 8,
@@ -492,8 +498,8 @@ const styles = StyleSheet.create({
     right: 2,
   },
   addPhotoButton: {
-    width: 80,
-    height: 80,
+    width: 64,
+    height: 64,
     borderRadius: Layout.borderRadiusSmall,
     borderWidth: 1,
     borderColor: 'rgba(0,0,0,0.04)',

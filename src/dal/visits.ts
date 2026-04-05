@@ -84,6 +84,16 @@ export async function getComparisonCandidates(
 }
 
 export async function deleteVisitsForHotel(db: Database, userId: number, hotelId: number) {
+  // Delete photos first (FK: photos.visit_id → visits.id)
+  const visits = await db
+    .select({ id: schema.visits.id })
+    .from(schema.visits)
+    .where(sql`${schema.visits.userId} = ${userId} AND ${schema.visits.hotelId} = ${hotelId}`);
+
+  for (const visit of visits) {
+    await db.delete(schema.photos).where(eq(schema.photos.visitId, visit.id));
+  }
+
   await db
     .delete(schema.visits)
     .where(

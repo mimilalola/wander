@@ -11,10 +11,25 @@ interface HotelListItemProps {
   country: string;
   priceLevel: number | null;
   coverPhoto?: string | null;
+  isSaved?: boolean;
+  isSlept?: boolean;
   onPress: () => void;
+  onToggleSaved?: () => void;
+  onToggleSlept?: () => void;
 }
 
-export function HotelListItem({ name, city, country, priceLevel, coverPhoto, onPress }: HotelListItemProps) {
+export function HotelListItem({
+  name,
+  city,
+  country,
+  priceLevel,
+  coverPhoto,
+  isSaved = false,
+  isSlept = false,
+  onPress,
+  onToggleSaved,
+  onToggleSlept,
+}: HotelListItemProps) {
   return (
     <TouchableOpacity style={styles.container} onPress={onPress} activeOpacity={0.7}>
       <View style={styles.imageBox}>
@@ -26,18 +41,47 @@ export function HotelListItem({ name, city, country, priceLevel, coverPhoto, onP
           </View>
         )}
       </View>
+
       <View style={styles.info}>
         <Text style={styles.name} numberOfLines={1}>{name}</Text>
         <Text style={styles.location} numberOfLines={1}>
           {city}, {country}
         </Text>
       </View>
+
       {priceLevel && (
         <View style={styles.priceContainer}>
           <PriceLevel level={priceLevel} size="small" />
         </View>
       )}
-      <Ionicons name="chevron-forward" size={18} color={Colors.textLight} />
+
+      <View style={styles.actions}>
+        <TouchableOpacity
+          onPress={onToggleSaved}
+          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+          style={styles.iconButton}
+          disabled={!onToggleSaved}
+        >
+          <Ionicons
+            name={isSaved ? 'star' : 'star-outline'}
+            size={18}
+            color={isSaved ? Colors.accent : Colors.textLight}
+          />
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          onPress={onToggleSlept}
+          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+          style={styles.iconButton}
+          disabled={!onToggleSlept}
+        >
+          <Ionicons
+            name={isSlept ? 'bed' : 'bed-outline'}
+            size={18}
+            color={isSlept ? Colors.accent : Colors.textLight}
+          />
+        </TouchableOpacity>
+      </View>
     </TouchableOpacity>
   );
 }
@@ -84,6 +128,15 @@ const styles = StyleSheet.create({
     color: Colors.textSecondary,
   },
   priceContainer: {
-    marginRight: 8,
+    marginRight: 10,
+  },
+  actions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    marginLeft: 4,
+  },
+  iconButton: {
+    padding: 4,
   },
 });

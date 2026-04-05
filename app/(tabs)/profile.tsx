@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useRef } from 'react';
 import {
   View,
   Text,
@@ -33,6 +33,8 @@ export default function ProfileScreen() {
   const [user, setUser] = useState<UserData | null>(null);
   const [stats, setStats] = useState<ProfileStats | null>(null);
   const [badges, setBadges] = useState<PassportBadge[]>([]);
+  const scrollRef = useRef<ScrollView>(null);
+  const passportY = useRef(0);
 
   const loadProfile = useCallback(async () => {
     const userData = await getUser(db);
@@ -59,9 +61,15 @@ export default function ProfileScreen() {
 
   const isEmpty = stats && stats.hotelsSlept === 0 && stats.hotelsSaved === 0;
 
+  const scrollToPassport = () => {
+    if (passportY.current > 0) {
+      scrollRef.current?.scrollTo({ y: passportY.current, animated: true });
+    }
+  };
+
   return (
     <SafeAreaView style={styles.safe}>
-      <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
+      <ScrollView ref={scrollRef} style={styles.container} showsVerticalScrollIndicator={false}>
         {/* Header — centered */}
         <View style={styles.header}>
           <View style={styles.avatar}>
@@ -72,44 +80,40 @@ export default function ProfileScreen() {
             <Text style={styles.bio}>{user.bio}</Text>
           ) : null}
           {user?.location && (
-            <Text style={styles.location}>{user.location}</Text>
+            <Text style={styles.locationText}>{user.location}</Text>
           )}
         </View>
 
-        {/* Stats inline — centered, tappable */}
+        {/* Stats — "X hotels • Z cities • V nights" */}
         {stats && !isEmpty && (
           <View style={styles.statsSection}>
             <Text style={styles.statsLine}>
-              <Text
-                style={styles.statTappable}
-                onPress={() => router.push('/(tabs)/list')}
-              >
+              <Text onPress={() => router.push('/(tabs)/list')}>
                 <Text style={styles.statNumber}>{stats.hotelsSlept}</Text>
                 <Text style={styles.statLabel}> hotels</Text>
               </Text>
               {'  \u2022  '}
-              <Text
-                style={styles.statTappable}
-                onPress={() => router.push('/(tabs)/list')}
-              >
-                <Text style={styles.statNumber}>{stats.hotelsSaved}</Text>
-                <Text style={styles.statLabel}> saved</Text>
+              <Text onPress={scrollToPassport}>
+                <Text style={styles.statNumber}>{stats.citiesVisited}</Text>
+                <Text style={styles.statLabel}> cities</Text>
               </Text>
-              {'  \u2022  '}
-              <Text style={styles.statNumber}>{stats.citiesVisited}</Text>
-              <Text style={styles.statLabel}> cities</Text>
               {'  \u2022  '}
               <Text style={styles.statNumber}>{stats.totalNights}</Text>
               <Text style={styles.statLabel}> nights</Text>
             </Text>
+            {stats.totalNights > 0 && (
+              <Text style={styles.subtitle}>
+                {stats.totalNights} nights away from home
+              </Text>
+            )}
           </View>
         )}
 
-        {/* Taste Summary */}
+        {/* Your traveler profile */}
         {stats?.tasteSummary ? (
           <View style={styles.section}>
-            <Text style={styles.editorialLabel}>YOUR TRAVELLER PROFILE</Text>
-            <Text style={styles.tasteSummary}>{stats.tasteSummary}</Text>
+            <Text style={styles.sectionTitle}>Your traveler profile</Text>
+            <Text style={styles.tasteSummarySmallCaps}>{stats.tasteSummary}</Text>
             <View style={styles.tagsRow}>
               {stats.topTags.map((t) => (
                 <TagChip key={t.tag} name={t.tag} />
@@ -121,7 +125,7 @@ export default function ProfileScreen() {
         {/* Cities */}
         {stats && stats.topCities.length > 0 && (
           <View style={styles.section}>
-            <Text style={styles.editorialLabel}>CITIES</Text>
+            <Text style={styles.sectionTitle}>Cities</Text>
             {stats.topCities.map((c) => (
               <View key={c.city} style={styles.cityRow}>
                 <View>
@@ -138,11 +142,15 @@ export default function ProfileScreen() {
 
         {/* Passport */}
         {badges.length > 0 && (
-          <View style={styles.section}>
-            <Text style={styles.editorialLabel}>PASSPORT</Text>
+          <View
+            style={styles.section}
+            onLayout={(e) => { passportY.current = e.nativeEvent.layout.y; }}
+          >
+            <Text style={styles.sectionTitle}>Passport</Text>
             <View style={styles.badgeGrid}>
               {badges.map((badge, i) => (
                 <View key={i} style={styles.badgeCard}>
+                  <View style={styles.badgeStampAccent} />
                   <Text style={styles.badgeTitle}>{badge.title}</Text>
                   <Text style={styles.badgeSubtitle}>{badge.subtitle}</Text>
                 </View>
@@ -209,7 +217,7 @@ const styles = StyleSheet.create({
     lineHeight: 22,
     textAlign: 'center',
   },
-  location: {
+  locationText: {
     fontSize: Typography.caption.fontSize,
     color: Colors.textSecondary,
     marginTop: 4,
@@ -227,26 +235,32 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: Colors.accent,
   },
-  statTappable: {
-    // tappable stat group
-  },
   statLabel: {
     fontSize: Typography.body.fontSize,
     color: Colors.textSecondary,
+  },
+  subtitle: {
+    fontSize: Typography.caption.fontSize,
+    fontStyle: 'italic',
+    color: Colors.textLight,
+    marginTop: 6,
   },
   section: {
     paddingHorizontal: Layout.padding,
     paddingTop: Layout.sectionGap,
   },
-  editorialLabel: {
-    ...Typography.editorial,
-    color: Colors.textSecondary,
-    marginBottom: 12,
-  },
-  tasteSummary: {
-    ...Typography.heading3,
+  sectionTitle: {
+    ...Typography.heading2,
     color: Colors.text,
     marginBottom: 14,
+  },
+  tasteSummarySmallCaps: {
+    fontSize: Typography.small.fontSize,
+    fontWeight: '500',
+    letterSpacing: 1.5,
+    textTransform: 'uppercase',
+    color: Colors.textSecondary,
+    marginBottom: 12,
   },
   tagsRow: {
     flexDirection: 'row',
@@ -286,6 +300,19 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     minWidth: '45%',
     flexGrow: 1,
+    overflow: 'hidden',
+    position: 'relative',
+  },
+  badgeStampAccent: {
+    position: 'absolute',
+    top: -6,
+    right: -6,
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    borderWidth: 1.5,
+    borderColor: Colors.accent,
+    opacity: 0.12,
   },
   badgeTitle: {
     fontSize: Typography.caption.fontSize,

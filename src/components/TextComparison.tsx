@@ -46,11 +46,11 @@ const styles = StyleSheet.create({
   question: {
     fontSize: Typography.body.fontSize,
     color: Colors.textSecondary,
-    marginBottom: 28,
+    marginBottom: 32,
   },
   hotelOption: {
     width: '100%',
-    paddingVertical: 20,
+    paddingVertical: 24,
     paddingHorizontal: 24,
     borderWidth: 1,
     borderColor: Colors.border,
@@ -66,6 +66,6 @@ const styles = StyleSheet.create({
   orText: {
     fontSize: Typography.body.fontSize,
     color: Colors.textLight,
-    marginVertical: 16,
+    marginVertical: 20,
   },
 });

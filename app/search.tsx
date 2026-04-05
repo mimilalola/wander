@@ -17,6 +17,8 @@ export default function SearchScreen() {
   const sqlite = useSQLiteContext();
   const db = createDb(sqlite);
   const [query, setQuery] = useState('');
+  const [savedNames, setSavedNames] = useState<Set<string>>(new Set());
+  const [sleptNames, setSleptNames] = useState<Set<string>>(new Set());
 
   const filteredResults = useMemo(() => {
     if (query.length < 2) return [];
@@ -63,6 +65,7 @@ export default function SearchScreen() {
     async (hotel: (typeof mockHotels)[0]) => {
       const hotelId = await ensureHotelInDb(hotel);
       await setSave(db, 1, hotelId, 'want');
+      setSavedNames((prev) => new Set(prev).add(hotel.name));
     },
     [ensureHotelInDb, db]
   );
@@ -70,6 +73,7 @@ export default function SearchScreen() {
   const handleQuickSlept = useCallback(
     async (hotel: (typeof mockHotels)[0]) => {
       const hotelId = await ensureHotelInDb(hotel);
+      setSleptNames((prev) => new Set(prev).add(hotel.name));
       router.push(`/rating/${hotelId}`);
     },
     [ensureHotelInDb, router]
@@ -96,38 +100,50 @@ export default function SearchScreen() {
         <FlatList
           data={filteredResults}
           keyExtractor={(item) => item.name}
-          renderItem={({ item }) => (
-            <TouchableOpacity
-              style={styles.resultItem}
-              onPress={() => handleSelectHotel(item)}
-              activeOpacity={0.7}
-            >
-              <View style={styles.resultInfo}>
-                <Text style={styles.resultName} numberOfLines={1}>
-                  {item.name}
-                </Text>
-                <Text style={styles.resultLocation}>
-                  {item.city}, {item.country}
-                </Text>
-              </View>
-              <View style={styles.quickActions}>
-                <TouchableOpacity
-                  style={styles.quickAction}
-                  onPress={() => handleQuickSave(item)}
-                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                >
-                  <Ionicons name="star-outline" size={18} color={Colors.textSecondary} />
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={styles.quickAction}
-                  onPress={() => handleQuickSlept(item)}
-                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                >
-                  <Ionicons name="bed-outline" size={18} color={Colors.textSecondary} />
-                </TouchableOpacity>
-              </View>
-            </TouchableOpacity>
-          )}
+          renderItem={({ item }) => {
+            const isSaved = savedNames.has(item.name);
+            const isSlept = sleptNames.has(item.name);
+            return (
+              <TouchableOpacity
+                style={styles.resultItem}
+                onPress={() => handleSelectHotel(item)}
+                activeOpacity={0.7}
+              >
+                <View style={styles.resultInfo}>
+                  <Text style={styles.resultName} numberOfLines={1}>
+                    {item.name}
+                  </Text>
+                  <Text style={styles.resultLocation}>
+                    {item.city}, {item.country}
+                  </Text>
+                </View>
+                <View style={styles.quickActions}>
+                  <TouchableOpacity
+                    style={styles.quickAction}
+                    onPress={() => handleQuickSave(item)}
+                    hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                  >
+                    <Ionicons
+                      name={isSaved ? 'star' : 'star-outline'}
+                      size={18}
+                      color={isSaved ? Colors.accent : Colors.textSecondary}
+                    />
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={styles.quickAction}
+                    onPress={() => handleQuickSlept(item)}
+                    hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                  >
+                    <Ionicons
+                      name={isSlept ? 'bed' : 'bed-outline'}
+                      size={18}
+                      color={isSlept ? Colors.accent : Colors.textSecondary}
+                    />
+                  </TouchableOpacity>
+                </View>
+              </TouchableOpacity>
+            );
+          }}
           ListFooterComponent={
             query.length >= 2 ? (
               <TouchableOpacity

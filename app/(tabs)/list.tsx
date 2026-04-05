@@ -23,7 +23,7 @@ import { Layout } from '../../src/constants/layout';
 import { Typography } from '../../src/constants/typography';
 import { createDb } from '../../src/db/client';
 import { removeSave } from '../../src/dal/saves';
-import { deleteVisitsForHotel } from '../../src/dal/visits';
+import { deleteVisitsForHotel, updateVisitRating } from '../../src/dal/visits';
 import * as schema from '../../src/db/schema';
 import { formatEmotion } from '../../src/utils/format';
 import type { SaveStatus, EmotionTier } from '../../src/types';
@@ -42,11 +42,19 @@ interface ListHotel {
 function SwipeableRow({
   children,
   onDelete,
+  onTap,
 }: {
   children: React.ReactNode;
   onDelete: () => void;
+  onTap?: () => void;
 }) {
   const translateX = useRef(new Animated.Value(0)).current;
+  const isOpen = useRef(false);
+
+  const resetPosition = () => {
+    Animated.spring(translateX, { toValue: 0, useNativeDriver: true }).start();
+    isOpen.current = false;
+  };
 
   const panResponder = useRef(
     PanResponder.create({
@@ -55,28 +63,46 @@ function SwipeableRow({
       onPanResponderMove: (_, gestureState) => {
         if (gestureState.dx < 0) {
           translateX.setValue(Math.max(gestureState.dx, -80));
+        } else if (isOpen.current) {
+          translateX.setValue(Math.min(gestureState.dx - 80, 0));
         }
       },
       onPanResponderRelease: (_, gestureState) => {
         if (gestureState.dx < -50) {
           Animated.spring(translateX, { toValue: -80, useNativeDriver: true }).start();
+          isOpen.current = true;
         } else {
-          Animated.spring(translateX, { toValue: 0, useNativeDriver: true }).start();
+          resetPosition();
         }
       },
     })
   ).current;
 
+  const handleContentPress = () => {
+    if (isOpen.current) {
+      resetPosition();
+    } else if (onTap) {
+      onTap();
+    }
+  };
+
+  const handleDelete = () => {
+    onDelete();
+    resetPosition();
+  };
+
   return (
     <View style={swipeStyles.container}>
-      <TouchableOpacity style={swipeStyles.deleteAction} onPress={onDelete} activeOpacity={0.7}>
+      <TouchableOpacity style={swipeStyles.deleteAction} onPress={handleDelete} activeOpacity={0.7}>
         <Ionicons name="trash-outline" size={18} color={Colors.white} />
       </TouchableOpacity>
       <Animated.View
         style={[swipeStyles.content, { transform: [{ translateX }] }]}
         {...panResponder.panHandlers}
       >
-        {children}
+        <TouchableOpacity activeOpacity={0.7} onPress={handleContentPress}>
+          {children}
+        </TouchableOpacity>
       </Animated.View>
     </View>
   );
@@ -108,6 +134,8 @@ export default function ListScreen() {
   const [filter, setFilter] = useState('Slept');
   const [hotels, setHotels] = useState<ListHotel[]>([]);
   const [menuHotel, setMenuHotel] = useState<ListHotel | null>(null);
+  const [reorderMode, setReorderMode] = useState(false);
+  const listRef = useRef<FlatList>(null);
 
   const loadHotels = useCallback(async () => {
     const results = await db
@@ -195,14 +223,59 @@ export default function ListScreen() {
   const savedHotels = hotels.filter((h) => h.saveStatus === 'want');
   const filtered = filter === 'Slept' ? sleptHotels : savedHotels;
 
+  const moveItem = (index: number, direction: 'up' | 'down') => {
+    const list = [...sleptHotels];
+    const targetIndex = direction === 'up' ? index - 1 : index + 1;
+    if (targetIndex < 0 || targetIndex >= list.length) return;
+
+    const [item] = list.splice(index, 1);
+    list.splice(targetIndex, 0, item);
+
+    // Update ratings to reflect new order (highest rank = highest rating)
+    const updated = list.map((h, i) => {
+      const newRating = list.length - i;
+      return { ...h, rating: h.rating !== null ? h.rating : newRating };
+    });
+    setHotels((prev) => {
+      const nonSlept = prev.filter((h) => h.saveStatus !== 'been');
+      return [...nonSlept, ...updated];
+    });
+  };
+
   const renderSleptItem = ({ item, index }: { item: ListHotel; index: number }) => (
-    <SwipeableRow onDelete={() => handleDelete(item)}>
-      <TouchableOpacity
-        style={styles.sleptItem}
-        onPress={() => router.push(`/hotel/${item.id}`)}
-        activeOpacity={0.7}
-      >
-        <Text style={styles.rank}>{index + 1}</Text>
+    <SwipeableRow
+      onDelete={() => handleDelete(item)}
+      onTap={() => router.push(`/hotel/${item.id}`)}
+    >
+      <View style={styles.sleptItem}>
+        {reorderMode ? (
+          <View style={styles.reorderControls}>
+            <TouchableOpacity
+              onPress={() => moveItem(index, 'up')}
+              disabled={index === 0}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            >
+              <Ionicons
+                name="chevron-up"
+                size={18}
+                color={index === 0 ? Colors.borderLight : Colors.textSecondary}
+              />
+            </TouchableOpacity>
+            <TouchableOpacity
+              onPress={() => moveItem(index, 'down')}
+              disabled={index === sleptHotels.length - 1}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            >
+              <Ionicons
+                name="chevron-down"
+                size={18}
+                color={index === sleptHotels.length - 1 ? Colors.borderLight : Colors.textSecondary}
+              />
+            </TouchableOpacity>
+          </View>
+        ) : (
+          <Text style={styles.rank}>{index + 1}</Text>
+        )}
         <View style={styles.sleptInfo}>
           <Text style={styles.hotelName} numberOfLines={1}>{item.name}</Text>
           <Text style={styles.hotelLocation}>
@@ -211,30 +284,31 @@ export default function ListScreen() {
           </Text>
         </View>
         <RatingStamp score={item.rating} size="small" />
-        <TouchableOpacity
-          style={styles.menuButton}
-          onPress={() => setMenuHotel(item)}
-          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-        >
-          <Ionicons name="ellipsis-vertical" size={16} color={Colors.textLight} />
-        </TouchableOpacity>
-      </TouchableOpacity>
+        {!reorderMode && (
+          <TouchableOpacity
+            style={styles.menuButton}
+            onPress={() => setMenuHotel(item)}
+            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+          >
+            <Ionicons name="ellipsis-vertical" size={16} color={Colors.textLight} />
+          </TouchableOpacity>
+        )}
+      </View>
     </SwipeableRow>
   );
 
   const renderSavedItem = ({ item }: { item: ListHotel }) => (
-    <SwipeableRow onDelete={() => handleDelete(item)}>
-      <TouchableOpacity
-        style={styles.savedItem}
-        onPress={() => router.push(`/hotel/${item.id}`)}
-        activeOpacity={0.7}
-      >
+    <SwipeableRow
+      onDelete={() => handleDelete(item)}
+      onTap={() => router.push(`/hotel/${item.id}`)}
+    >
+      <View style={styles.savedItem}>
         <Ionicons name="star" size={16} color={Colors.accent} />
         <View style={styles.savedInfo}>
           <Text style={styles.hotelName} numberOfLines={1}>{item.name}</Text>
           <Text style={styles.hotelLocation}>{item.city}, {item.country}</Text>
         </View>
-      </TouchableOpacity>
+      </View>
     </SwipeableRow>
   );
 
@@ -243,17 +317,28 @@ export default function ListScreen() {
       <View style={styles.container}>
         <View style={styles.header}>
           <Text style={styles.title}>My List</Text>
+          {filter === 'Slept' && sleptHotels.length > 1 && (
+            <TouchableOpacity
+              onPress={() => setReorderMode(!reorderMode)}
+              activeOpacity={0.7}
+            >
+              <Text style={styles.reorderToggle}>
+                {reorderMode ? 'Done' : 'Reorder'}
+              </Text>
+            </TouchableOpacity>
+          )}
         </View>
 
         <View style={styles.segmentContainer}>
           <SegmentControl
             options={['Slept', 'Saved']}
             selected={filter}
-            onChange={setFilter}
+            onChange={(val) => { setFilter(val); setReorderMode(false); }}
           />
         </View>
 
         <FlatList
+          ref={listRef}
           data={filtered}
           keyExtractor={(item) => item.id.toString()}
           contentContainerStyle={styles.listContent}
@@ -313,6 +398,9 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   header: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
     paddingHorizontal: Layout.padding,
     paddingTop: 12,
     paddingBottom: 12,
@@ -320,6 +408,11 @@ const styles = StyleSheet.create({
   title: {
     ...Typography.heading1,
     color: Colors.text,
+  },
+  reorderToggle: {
+    fontSize: Typography.caption.fontSize,
+    fontWeight: '500',
+    color: Colors.accent,
   },
   segmentContainer: {
     paddingHorizontal: Layout.padding,
@@ -341,6 +434,11 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: Colors.textSecondary,
     textAlign: 'center',
+  },
+  reorderControls: {
+    width: 24,
+    alignItems: 'center',
+    gap: 2,
   },
   sleptInfo: {
     flex: 1,

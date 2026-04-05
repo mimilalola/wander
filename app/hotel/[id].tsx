@@ -219,55 +219,55 @@ export default function HotelDetailScreen() {
           </TouchableOpacity>
         </View>
 
-        {/* Your Stay */}
+        {/* Stay meta + notes */}
         {latestVisit && (
           <View style={styles.section}>
-            <Text style={styles.editorialLabel}>YOUR STAY</Text>
-            <View style={styles.stayDetails}>
-              {latestVisit.emotion && (
-                <Text style={styles.emotionText}>
-                  {formatEmotion(latestVisit.emotion)}
-                </Text>
-              )}
-              {latestVisit.nights && (
-                <Text style={styles.nightsText}>
-                  {formatNights(latestVisit.nights)}
-                </Text>
-              )}
-              {/* Notes — in card */}
-              {editingNotes ? (
-                <View style={styles.notesEditContainer}>
-                  <TextInput
-                    style={styles.notesInput}
-                    multiline
-                    value={notesText}
-                    onChangeText={setNotesText}
-                    placeholder="Add a note..."
-                    placeholderTextColor={Colors.textLight}
-                    textAlignVertical="top"
-                    autoFocus
-                  />
-                  <View style={styles.notesActions}>
-                    <TouchableOpacity onPress={() => setEditingNotes(false)}>
-                      <Text style={styles.notesCancelText}>Cancel</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity onPress={handleSaveNotes}>
-                      <Text style={styles.notesSaveText}>Save</Text>
-                    </TouchableOpacity>
-                  </View>
+            <Text style={styles.metaLine}>
+              {'Ranked \u00B7 '}
+              <Text style={styles.metaDate}>{formatDate(latestVisit.createdAt)}</Text>
+              {latestVisit.nights ? ` \u00B7 ${formatNights(latestVisit.nights)}` : ''}
+            </Text>
+
+            {/* Notes — in card */}
+            {editingNotes ? (
+              <View style={styles.notesEditContainer}>
+                <TextInput
+                  style={styles.notesInput}
+                  multiline
+                  value={notesText}
+                  onChangeText={setNotesText}
+                  placeholder="Add a note..."
+                  placeholderTextColor={Colors.textLight}
+                  textAlignVertical="top"
+                  autoFocus
+                />
+                <View style={styles.notesActions}>
+                  <TouchableOpacity onPress={() => setEditingNotes(false)}>
+                    <Text style={styles.notesCancelText}>Cancel</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity onPress={handleSaveNotes}>
+                    <Text style={styles.notesSaveText}>Save</Text>
+                  </TouchableOpacity>
                 </View>
-              ) : (
-                <TouchableOpacity onPress={handleEditNotes} style={styles.notesCard}>
-                  {latestVisit.notes ? (
-                    <Text style={styles.notes}>{latestVisit.notes}</Text>
-                  ) : null}
-                  <Text style={styles.editNotesLink}>
-                    {latestVisit.notes ? 'Edit notes' : 'Add notes'}
-                  </Text>
-                </TouchableOpacity>
-              )}
-              <Text style={styles.visitDate}>RANKED · {formatDate(latestVisit.createdAt)}</Text>
-            </View>
+              </View>
+            ) : (
+              <TouchableOpacity onPress={handleEditNotes} style={styles.notesCard}>
+                {latestVisit.notes ? (
+                  <Text style={styles.notes}>{latestVisit.notes}</Text>
+                ) : null}
+                <Text style={styles.editNotesLink}>
+                  {latestVisit.notes ? 'Edit notes' : 'Add notes'}
+                </Text>
+              </TouchableOpacity>
+            )}
+
+            <TouchableOpacity
+              style={styles.rankAgainButton}
+              onPress={() => router.push(`/rating/${hotel.id}`)}
+              activeOpacity={0.7}
+            >
+              <Text style={styles.rankAgainText}>Rank again</Text>
+            </TouchableOpacity>
           </View>
         )}
 
@@ -415,23 +415,21 @@ const styles = StyleSheet.create({
   },
   section: {
     paddingHorizontal: Layout.padding,
-    paddingTop: Layout.sectionGap,
+    paddingTop: 24,
   },
   editorialLabel: {
     ...Typography.editorial,
     color: Colors.textSecondary,
     marginBottom: 16,
   },
-  stayDetails: {
-    gap: 6,
-  },
-  emotionText: {
-    ...Typography.heading3,
-    color: Colors.text,
-  },
-  nightsText: {
-    fontSize: Typography.body.fontSize,
+  metaLine: {
+    fontSize: Typography.caption.fontSize,
     color: Colors.textSecondary,
+    marginBottom: 12,
+  },
+  metaDate: {
+    fontWeight: '600',
+    color: Colors.text,
   },
   notes: {
     fontSize: Typography.body.fontSize,
@@ -485,6 +483,15 @@ const styles = StyleSheet.create({
     color: Colors.textLight,
     letterSpacing: 1,
     marginTop: 8,
+  },
+  rankAgainButton: {
+    marginTop: 16,
+    alignSelf: 'flex-start',
+  },
+  rankAgainText: {
+    fontSize: Typography.caption.fontSize,
+    fontWeight: '500',
+    color: Colors.accent,
   },
   visitItem: {
     flexDirection: 'row',

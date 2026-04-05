@@ -175,36 +175,38 @@ export default function ReceptionScreen() {
             {/* Saved */}
             {saved.length > 0 && (
               <View style={styles.section}>
-                <View style={styles.sectionHeader}>
+                <View style={styles.sectionHeaderInline}>
                   <Text style={styles.editorialLabel}>SAVED</Text>
                   <TouchableOpacity onPress={() => router.push('/(tabs)/list')}>
                     <Text style={styles.seeAll}>See all</Text>
                   </TouchableOpacity>
                 </View>
-                {saved.map((hotel) => (
-                  <TouchableOpacity
-                    key={hotel.id}
-                    style={styles.savedItem}
-                    onPress={() => router.push(`/hotel/${hotel.id}`)}
-                    activeOpacity={0.7}
-                  >
-                    <Ionicons name="star" size={16} color={Colors.accent} />
-                    <View style={styles.savedInfo}>
-                      <Text style={styles.savedName} numberOfLines={1}>
-                        {hotel.name}
-                      </Text>
-                      <Text style={styles.savedLocation}>
-                        {hotel.city}, {hotel.country}
-                      </Text>
-                    </View>
-                  </TouchableOpacity>
+                {saved.map((hotel, index) => (
+                  <View key={hotel.id}>
+                    {index > 0 && <View style={styles.divider} />}
+                    <TouchableOpacity
+                      style={styles.savedItem}
+                      onPress={() => router.push(`/hotel/${hotel.id}`)}
+                      activeOpacity={0.7}
+                    >
+                      <Ionicons name="star" size={16} color={Colors.accent} />
+                      <View style={styles.savedInfo}>
+                        <Text style={styles.savedName} numberOfLines={1}>
+                          {hotel.name}
+                        </Text>
+                        <Text style={styles.savedLocation}>
+                          {hotel.city}, {hotel.country}
+                        </Text>
+                      </View>
+                    </TouchableOpacity>
+                  </View>
                 ))}
               </View>
             )}
           </>
         )}
 
-        <View style={{ height: 24 }} />
+        <View style={{ height: 8 }} />
       </ScrollView>
     </SafeAreaView>
   );
@@ -240,16 +242,20 @@ const styles = StyleSheet.create({
     color: Colors.textSecondary,
     marginBottom: 16,
   },
-  sectionHeader: {
+  sectionHeaderInline: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 16,
+    alignItems: 'baseline',
+    marginBottom: 4,
   },
   seeAll: {
     fontSize: Typography.caption.fontSize,
     fontWeight: '500',
     color: Colors.accent,
+  },
+  divider: {
+    height: 1,
+    backgroundColor: 'rgba(0,0,0,0.04)',
   },
   horizontalScroll: {
     marginHorizontal: -Layout.padding,

@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useMemo } from 'react';
+import React, { useState, useCallback, useMemo, useEffect } from 'react';
 import { View, Text, StyleSheet, FlatList, SafeAreaView, TouchableOpacity } from 'react-native';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { useSQLiteContext } from 'expo-sqlite';
@@ -44,11 +44,15 @@ export default function SearchScreen() {
     setSleptNames(nextSlept);
   }, [db]);
 
-  useFocusEffect(
-    useCallback(() => {
-      loadStatuses();
-    }, [loadStatuses])
-  );
+ useFocusEffect(
+  useCallback(() => {
+    loadStatuses();
+  }, [loadStatuses])
+);
+
+useEffect(() => {
+  loadStatuses();
+}, [loadStatuses]);
 
   const filteredResults = useMemo(() => {
     if (query.length < 2) return [];
@@ -107,12 +111,12 @@ export default function SearchScreen() {
       await addTagsToHotel(db, hotelId, hotel.tags);
     }
 
-    const existingSave = await db
-      .select()
-      .from(schema.saves)
-      .where(eq(schema.saves.hotelId, hotelId));
+   const existingSave = await db
+  .select()
+  .from(schema.saves)
+  .where(eq(schema.saves.userId, 1));
 
-    const userSave = existingSave.find((row) => row.userId === 1);
+const userSave = existingSave.find((row) => row.hotelId === hotelId);
 
     if (userSave) {
       if (userSave.status === 'saved') {
@@ -154,11 +158,11 @@ export default function SearchScreen() {
     }
 
     const existingSave = await db
-      .select()
-      .from(schema.saves)
-      .where(eq(schema.saves.hotelId, hotelId));
+  .select()
+  .from(schema.saves)
+  .where(eq(schema.saves.userId, 1));
 
-    const userSave = existingSave.find((row) => row.userId === 1);
+const userSave = existingSave.find((row) => row.hotelId === hotelId);
 
     if (userSave) {
       if (userSave.status === 'slept') {

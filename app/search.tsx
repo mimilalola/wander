@@ -15,22 +15,26 @@ export default function SearchScreen() {
   const router = useRouter();
   const sqlite = useSQLiteContext();
   const db = createDb(sqlite);
+
   const [query, setQuery] = useState('');
+  const [savedNames, setSavedNames] = useState<Set<string>>(new Set());
+  const [sleptNames, setSleptNames] = useState<Set<string>>(new Set());
 
   const filteredResults = useMemo(() => {
     if (query.length < 2) return [];
     const q = query.toLowerCase();
-    return mockHotels.filter(
-      (h) =>
-        h.name.toLowerCase().includes(q) ||
-        h.city.toLowerCase().includes(q) ||
-        h.country.toLowerCase().includes(q)
-    ).slice(0, 20);
+    return mockHotels
+      .filter(
+        (h) =>
+          h.name.toLowerCase().includes(q) ||
+          h.city.toLowerCase().includes(q) ||
+          h.country.toLowerCase().includes(q)
+      )
+      .slice(0, 20);
   }, [query]);
 
   const handleSelectHotel = useCallback(
     async (hotel: (typeof mockHotels)[0]) => {
-      // Check if already in local DB
       const existing = await searchLocalHotels(db, hotel.name);
       let hotelId: number;
 
@@ -54,6 +58,36 @@ export default function SearchScreen() {
     [db, router]
   );
 
+  const handleToggleSaved = useCallback((hotelName: string) => {
+    setSavedNames((prev) => {
+      const next = new Set(prev);
+      if (next.has(hotelName)) {
+        next.delete(hotelName);
+      } else {
+        next.add(hotelName);
+      }
+      return next;
+    });
+  }, []);
+
+  const handleToggleSlept = useCallback((hotelName: string) => {
+    setSleptNames((prev) => {
+      const next = new Set(prev);
+      if (next.has(hotelName)) {
+        next.delete(hotelName);
+      } else {
+        next.add(hotelName);
+      }
+      return next;
+    });
+
+    setSavedNames((prev) => {
+      const next = new Set(prev);
+      next.delete(hotelName);
+      return next;
+    });
+  }, []);
+
   return (
     <SafeAreaView style={styles.safe}>
       <View style={styles.container}>
@@ -64,7 +98,13 @@ export default function SearchScreen() {
             </TouchableOpacity>
             <Text style={styles.title}>Search Hotels</Text>
           </View>
-          <SearchBar   value={query}   onChangeText={setQuery}   autoFocus   placeholder="Where's your next adventure?" />
+
+          <SearchBar
+            value={query}
+            onChangeText={setQuery}
+            autoFocus
+            placeholder="Where's your next adventure?"
+          />
         </View>
 
         <FlatList
@@ -76,6 +116,10 @@ export default function SearchScreen() {
               city={item.city}
               country={item.country}
               priceLevel={item.priceLevel}
+              isSaved={savedNames.has(item.name)}
+              isSlept={sleptNames.has(item.name)}
+              onToggleSaved={() => handleToggleSaved(item.name)}
+              onToggleSlept={() => handleToggleSlept(item.name)}
               onPress={() => handleSelectHotel(item)}
             />
           )}

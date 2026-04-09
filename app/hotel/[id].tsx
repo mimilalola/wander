@@ -156,7 +156,7 @@ export default function HotelDetailScreen() {
             <Ionicons
               name={hotel.save?.status === 'want' ? 'heart' : 'heart-outline'}
               size={20}
-              color={hotel.save?.status === 'want' ? Colors.white : Colors.want}
+              color={hotel.save?.status === 'want' ? Colors.white : Colors.saved}
             />
             <Text
               style={[
@@ -179,7 +179,7 @@ export default function HotelDetailScreen() {
             <Ionicons
               name={hotel.save?.status === 'been' ? 'checkmark-circle' : 'checkmark-circle-outline'}
               size={20}
-              color={hotel.save?.status === 'been' ? Colors.white : Colors.been}
+              color={hotel.save?.status === 'been' ? Colors.white : Colors.slept}
             />
             <Text
               style={[

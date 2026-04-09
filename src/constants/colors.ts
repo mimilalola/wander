@@ -13,6 +13,9 @@ export const Colors = {
   success: '#10b981',
   saved: '#6366f1',
   slept: '#e94560',
+  // Aliases matching DB status names ('want' = saved, 'been' = slept)
+  want: '#6366f1',
+  been: '#e94560',
   white: '#ffffff',
   black: '#000000',
   overlay: 'rgba(0,0,0,0.5)',

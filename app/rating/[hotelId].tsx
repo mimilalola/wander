@@ -21,9 +21,19 @@ import { ComparisonCard } from '../../src/components/ComparisonCard';
 import { createDb } from '../../src/db/client';
 import { getHotelById } from '../../src/dal/hotels';
 import { toggleSave } from '../../src/dal/saves';
-import { createVisit, getComparisonCandidates, updateVisitRank } from '../../src/dal/visits';
+import {
+  createVisit,
+  getComparisonCandidates,
+  updateVisitRank,
+  getAllVisitScoresForUser,
+  getTopRankedVisit,
+} from '../../src/dal/visits';
 import { addPhotos } from '../../src/dal/photos';
-import { calculateElo } from '../../src/utils/ranking';
+import {
+  getTier,
+  computeInsertionScore,
+  TIER_BOUNDS,
+} from '../../src/utils/ranking';
 
 type Step = 'rate' | 'compare' | 'notes' | 'photos' | 'confirm';
 
@@ -46,7 +56,10 @@ export default function RatingScreen() {
   const [comparisons, setComparisons] = useState<CompCandidate[]>([]);
   const [compIndex, setCompIndex] = useState(0);
   const [newVisitId, setNewVisitId] = useState<number | null>(null);
-  const [newVisitRank, setNewVisitRank] = useState(1500);
+  // Insertion-based score computed after all comparisons
+  const [newVisitRank, setNewVisitRank] = useState<number | null>(null);
+  // Tracks wins/losses for insertion scoring (not updated in state mid-comparison)
+  const [allExistingScores, setAllExistingScores] = useState<number[]>([]);
 
   useEffect(() => {
     if (!hotelId) return;
@@ -54,22 +67,17 @@ export default function RatingScreen() {
       const hotel = await getHotelById(db, parseInt(hotelId));
       if (hotel) setHotelName(hotel.name);
     })();
-  }, [hotelId, db]);
-
-  const loadComparisons = useCallback(async () => {
-    if (!hotelId) return;
-    const candidates = await getComparisonCandidates(db, 1, parseInt(hotelId));
-    setComparisons(candidates as CompCandidate[]);
-  }, [hotelId, db]);
+  }, [hotelId]);
 
   const handleNext = async () => {
     switch (step) {
-      case 'rate':
+      case 'rate': {
         if (rating === null) {
           Alert.alert('Rate this hotel', 'Please select a rating from 1 to 10');
           return;
         }
-        // Create the visit record now
+
+        // Create the visit record (unranked until comparisons complete)
         const visit = await createVisit(db, {
           userId: 1,
           hotelId: parseInt(hotelId!),
@@ -77,26 +85,64 @@ export default function RatingScreen() {
           notes: null,
         });
         setNewVisitId(visit.id);
-        // Mark as been
+
+        // Transition save status: want → been (removes from Saved, adds to Slept)
         await toggleSave(db, 1, parseInt(hotelId!), 'been');
-        // Load comparisons and go to compare or notes
-        const candidates = await getComparisonCandidates(db, 1, parseInt(hotelId!));
+
+        // Load all existing scores for insertion score context
+        const allScores = await getAllVisitScoresForUser(db, 1);
+        setAllExistingScores(allScores);
+
+        // Load same-tier comparison candidates
+        const tier = getTier(rating);
+        const bounds = TIER_BOUNDS[tier];
+        const candidates = await getComparisonCandidates(
+          db,
+          1,
+          parseInt(hotelId!),
+          bounds.min,
+          bounds.max
+        );
         setComparisons(candidates as CompCandidate[]);
+
         if (candidates.length > 0) {
           setStep('compare');
         } else {
+          // No same-tier hotels to compare against — assign tier default
+          const tierScores = allScores.filter(
+            (s) => s >= bounds.min && s <= bounds.max
+          );
+          const score = computeInsertionScore([], [], tier, tierScores);
+          setNewVisitRank(score);
           setStep('notes');
         }
         break;
-      case 'compare':
+      }
+
+      case 'compare': {
+        // User pressed "Next" to skip remaining comparisons
+        // Compute score with whatever comparison data we have so far
+        if (rating !== null) {
+          const tier = getTier(rating);
+          const bounds = TIER_BOUNDS[tier];
+          const tierScores = allExistingScores.filter(
+            (s) => s >= bounds.min && s <= bounds.max
+          );
+          const score = computeInsertionScore([], [], tier, tierScores);
+          setNewVisitRank(score);
+        }
         setStep('notes');
         break;
+      }
+
       case 'notes':
         setStep('photos');
         break;
+
       case 'photos':
         setStep('confirm');
         break;
+
       case 'confirm':
         await handleSave();
         break;
@@ -104,30 +150,84 @@ export default function RatingScreen() {
   };
 
   const handleComparison = async (winnerId: number, loserId: number) => {
-    if (!newVisitId) return;
+    if (!newVisitId || rating === null) return;
 
-    const winnerComp = comparisons.find((c) => c.hotel.id === winnerId);
     const isNewHotelWinner = winnerId === parseInt(hotelId!);
+    const currentComp = comparisons[compIndex];
+    const compScore = currentComp?.visit.rank ?? 0;
 
-    const winnerRank = isNewHotelWinner ? newVisitRank : (winnerComp?.visit.rank ?? 1500);
-    const loserRank = isNewHotelWinner ? (comparisons[compIndex]?.visit.rank ?? 1500) : newVisitRank;
+    // Accumulate wins/losses WITHOUT relying on stale state
+    // (we read them from refs via closure-captured variables in the last step)
+    const isLastComparison = compIndex >= comparisons.length - 1;
 
-    const { newWinnerRank, newLoserRank } = calculateElo(winnerRank, loserRank);
-
-    if (isNewHotelWinner) {
-      setNewVisitRank(newWinnerRank);
-      const loserVisitId = comparisons[compIndex]?.visit.id;
-      if (loserVisitId) await updateVisitRank(db, loserVisitId, newLoserRank);
-    } else {
-      setNewVisitRank(newLoserRank);
-      if (winnerComp) await updateVisitRank(db, winnerComp.visit.id, newWinnerRank);
-    }
-
-    if (compIndex < comparisons.length - 1) {
+    if (!isLastComparison) {
+      // Not the last comparison — record result by updating local state and advance
+      // We recalculate from scratch at the final step, so we track incrementally here
+      if (isNewHotelWinner) {
+        setComparisons((prev) => {
+          // Tag the current comparison as "won" by mutating a copy
+          const copy = [...prev];
+          (copy[compIndex] as any).__won = true;
+          return copy;
+        });
+      } else {
+        setComparisons((prev) => {
+          const copy = [...prev];
+          (copy[compIndex] as any).__won = false;
+          return copy;
+        });
+      }
       setCompIndex(compIndex + 1);
-    } else {
-      setStep('notes');
+      return;
     }
+
+    // ---- Last comparison: compute final insertion score ----
+    const tier = getTier(rating);
+    const bounds = TIER_BOUNDS[tier];
+    const tierScores = allExistingScores.filter(
+      (s) => s >= bounds.min && s <= bounds.max
+    );
+
+    // Collect all win/loss data including this final comparison
+    const winnerScores: number[] = [];
+    const loserScores: number[] = [];
+
+    for (let i = 0; i < comparisons.length; i++) {
+      const comp = comparisons[i];
+      const score = comp.visit.rank ?? 0;
+      if (i < comparisons.length - 1) {
+        // Previous comparisons tagged via __won
+        if ((comp as any).__won === true) {
+          winnerScores.push(score);
+        } else if ((comp as any).__won === false) {
+          loserScores.push(score);
+        }
+      } else {
+        // Current (final) comparison
+        if (isNewHotelWinner) {
+          winnerScores.push(compScore);
+        } else {
+          loserScores.push(compScore);
+        }
+      }
+    }
+
+    const finalScore = computeInsertionScore(winnerScores, loserScores, tier, tierScores);
+    setNewVisitRank(finalScore);
+
+    // Enforce "only ONE 10.0" rule:
+    // If the new hotel earns 10.0, the previous top must be downgraded.
+    if (finalScore >= 10.0) {
+      const currentTop = await getTopRankedVisit(db, 1);
+      if (currentTop && currentTop.id !== newVisitId) {
+        const scoresBelow10 = tierScores.filter((s) => s < 10.0).sort((a, b) => b - a);
+        const nextScore = scoresBelow10.length > 0 ? scoresBelow10[0] : 9.0;
+        const newOldTopScore = Math.round(((10.0 + nextScore) / 2) * 10) / 10;
+        await updateVisitRank(db, currentTop.id, newOldTopScore);
+      }
+    }
+
+    setStep('notes');
   };
 
   const handlePickPhotos = async () => {
@@ -145,25 +245,36 @@ export default function RatingScreen() {
   const handleSave = async () => {
     if (!newVisitId) return;
 
-    // Update notes and rank on the visit
+    // Persist the insertion-based score and notes
     await sqlite.runAsync(
       `UPDATE visits SET notes = ?, rank = ? WHERE id = ?`,
       [notes || null, newVisitRank, newVisitId]
     );
 
-    // Save photos
     if (photoUris.length > 0) {
       await addPhotos(db, newVisitId, photoUris);
     }
 
-    router.back();
+    // Return directly to Reception (home tab), closing rating and hotel detail
+    router.navigate('/(tabs)');
   };
 
   const handleSkip = () => {
     switch (step) {
-      case 'compare':
+      case 'compare': {
+        // Skip remaining comparisons — assign tier default based on data so far
+        if (rating !== null) {
+          const tier = getTier(rating);
+          const bounds = TIER_BOUNDS[tier];
+          const tierScores = allExistingScores.filter(
+            (s) => s >= bounds.min && s <= bounds.max
+          );
+          const score = computeInsertionScore([], [], tier, tierScores);
+          setNewVisitRank(score);
+        }
         setStep('notes');
         break;
+      }
       case 'notes':
         setStep('photos');
         break;
@@ -189,7 +300,8 @@ export default function RatingScreen() {
               style={[
                 styles.stepDot,
                 step === s && styles.stepDotActive,
-                ['rate', 'compare', 'notes', 'photos', 'confirm'].indexOf(step) > i && styles.stepDotDone,
+                ['rate', 'compare', 'notes', 'photos', 'confirm'].indexOf(step) > i &&
+                  styles.stepDotDone,
               ]}
             />
           ))}
@@ -231,8 +343,12 @@ export default function RatingScreen() {
                 country: currentComparison.hotel.country,
                 rating: currentComparison.visit.rating,
               }}
-              onSelectA={() => handleComparison(parseInt(hotelId!), currentComparison.hotel.id)}
-              onSelectB={() => handleComparison(currentComparison.hotel.id, parseInt(hotelId!))}
+              onSelectA={() =>
+                handleComparison(parseInt(hotelId!), currentComparison.hotel.id)
+              }
+              onSelectB={() =>
+                handleComparison(currentComparison.hotel.id, parseInt(hotelId!))
+              }
             />
           </View>
         )}

@@ -1,8 +1,18 @@
-import React, { useState, useCallback } from 'react';
-import { View, Text, StyleSheet, FlatList, SafeAreaView } from 'react-native';
+import React, { useState, useCallback, useRef } from 'react';
+import {
+  View,
+  Text,
+  StyleSheet,
+  FlatList,
+  SafeAreaView,
+  TouchableOpacity,
+  Alert,
+} from 'react-native';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { useSQLiteContext } from 'expo-sqlite';
 import { eq, sql, desc } from 'drizzle-orm';
+import Swipeable from 'react-native-gesture-handler/Swipeable';
+import { Ionicons } from '@expo/vector-icons';
 import { HotelCard } from '../../src/components/HotelCard';
 import { SegmentControl } from '../../src/components/SegmentControl';
 import { EmptyState } from '../../src/components/EmptyState';
@@ -10,6 +20,7 @@ import { Colors } from '../../src/constants/colors';
 import { Layout } from '../../src/constants/layout';
 import { createDb } from '../../src/db/client';
 import * as schema from '../../src/db/schema';
+import { removeSave } from '../../src/dal/saves';
 import type { SaveStatus } from '../../src/types';
 
 interface SavedHotel {
@@ -29,6 +40,8 @@ export default function ListScreen() {
   const db = createDb(sqlite);
   const [filter, setFilter] = useState('All');
   const [hotels, setHotels] = useState<SavedHotel[]>([]);
+  // Track open swipeable so we can close it when another opens
+  const openSwipeableRef = useRef<Swipeable | null>(null);
 
   const loadHotels = useCallback(async () => {
     const results = await db
@@ -69,11 +82,50 @@ export default function ListScreen() {
     }, [loadHotels])
   );
 
+  const handleDelete = useCallback(
+    async (hotel: SavedHotel) => {
+      const isSlept = hotel.saveStatus === 'been';
+      Alert.alert(
+        'Remove Hotel',
+        isSlept
+          ? `Remove ${hotel.name}? This will also delete your visit history and photos.`
+          : `Remove ${hotel.name} from your wishlist?`,
+        [
+          { text: 'Cancel', style: 'cancel' },
+          {
+            text: 'Remove',
+            style: 'destructive',
+            onPress: async () => {
+              await removeSave(db, 1, hotel.id);
+              await loadHotels();
+            },
+          },
+        ]
+      );
+    },
+    [db, loadHotels]
+  );
+
+  // Filter using the correct DB status values ('want' = Saved, 'been' = Slept)
   const filtered = hotels.filter((h) => {
-    if (filter === 'Saved') return h.saveStatus === 'saved';
-    if (filter === 'Slept') return h.saveStatus === 'slept';
+    if (filter === 'Saved') return h.saveStatus === 'want';
+    if (filter === 'Slept') return h.saveStatus === 'been';
     return true;
   });
+
+  const renderRightActions = useCallback(
+    (hotel: SavedHotel) => (
+      <TouchableOpacity
+        style={styles.deleteAction}
+        onPress={() => handleDelete(hotel)}
+        activeOpacity={0.8}
+      >
+        <Ionicons name="trash-outline" size={22} color={Colors.white} />
+        <Text style={styles.deleteActionText}>Delete</Text>
+      </TouchableOpacity>
+    ),
+    [handleDelete]
+  );
 
   return (
     <SafeAreaView style={styles.safe}>
@@ -96,16 +148,34 @@ export default function ListScreen() {
           keyExtractor={(item) => item.id.toString()}
           contentContainerStyle={styles.listContent}
           renderItem={({ item }) => (
-            <HotelCard
-              name={item.name}
-              city={item.city}
-              country={item.country}
-              priceLevel={item.priceLevel}
-              coverPhoto={item.coverPhoto}
-              saveStatus={item.saveStatus}
-              rating={item.rating}
-              onPress={() => router.push(`/hotel/${item.id}`)}
-            />
+            <Swipeable
+              ref={(ref) => {
+                // Close the previously open swipeable when a new one opens
+                if (ref && openSwipeableRef.current && openSwipeableRef.current !== ref) {
+                  openSwipeableRef.current.close();
+                }
+              }}
+              onSwipeableOpen={() => {}}
+              renderRightActions={() => renderRightActions(item)}
+              friction={2}
+              rightThreshold={40}
+              overshootRight={false}
+            >
+              <HotelCard
+                name={item.name}
+                city={item.city}
+                country={item.country}
+                priceLevel={item.priceLevel}
+                coverPhoto={item.coverPhoto}
+                saveStatus={item.saveStatus}
+                rating={item.rating}
+                onPress={() => {
+                  // Close any open swipeable before navigating
+                  openSwipeableRef.current?.close();
+                  router.push(`/hotel/${item.id}`);
+                }}
+              />
+            </Swipeable>
           )}
           ListEmptyComponent={
             <EmptyState
@@ -158,5 +228,20 @@ const styles = StyleSheet.create({
   listContent: {
     paddingHorizontal: Layout.padding,
     paddingBottom: 20,
+  },
+  deleteAction: {
+    backgroundColor: Colors.accent,
+    justifyContent: 'center',
+    alignItems: 'center',
+    width: 80,
+    borderRadius: Layout.borderRadius,
+    marginBottom: 12,
+    marginLeft: 8,
+    gap: 4,
+  },
+  deleteActionText: {
+    color: Colors.white,
+    fontSize: 12,
+    fontWeight: '600',
   },
 });

@@ -11,6 +11,7 @@ import { Layout } from '../src/constants/layout';
 import { createDb } from '../src/db/client';
 import * as schema from '../src/db/schema';
 import { createHotel, addTagsToHotel, searchLocalHotels } from '../src/dal/hotels';
+import { toggleSave } from '../src/dal/saves';
 import { mockHotels } from '../src/data/mock-hotels';
 
 export default function SearchScreen() {
@@ -19,6 +20,7 @@ export default function SearchScreen() {
   const db = createDb(sqlite);
 
   const [query, setQuery] = useState('');
+  // savedNames = hotels with status 'want', sleptNames = hotels with status 'been'
   const [savedNames, setSavedNames] = useState<Set<string>>(new Set());
   const [sleptNames, setSleptNames] = useState<Set<string>>(new Set());
 
@@ -36,23 +38,23 @@ export default function SearchScreen() {
     const nextSlept = new Set<string>();
 
     for (const row of rows) {
-      if (row.status === 'saved') nextSaved.add(row.name);
-      if (row.status === 'slept') nextSlept.add(row.name);
+      if (row.status === 'want') nextSaved.add(row.name);
+      if (row.status === 'been') nextSlept.add(row.name);
     }
 
     setSavedNames(nextSaved);
     setSleptNames(nextSlept);
   }, [db]);
 
- useFocusEffect(
-  useCallback(() => {
-    loadStatuses();
-  }, [loadStatuses])
-);
+  useFocusEffect(
+    useCallback(() => {
+      loadStatuses();
+    }, [loadStatuses])
+  );
 
-useEffect(() => {
-  loadStatuses();
-}, [loadStatuses]);
+  useEffect(() => {
+    loadStatuses();
+  }, [loadStatuses]);
 
   const filteredResults = useMemo(() => {
     if (query.length < 2) return [];
@@ -67,122 +69,62 @@ useEffect(() => {
       .slice(0, 20);
   }, [query]);
 
-  const handleSelectHotel = useCallback(
-    async (hotel: (typeof mockHotels)[0]) => {
+  /** Resolve or create the local hotel record, returning its id. */
+  const getOrCreateHotelId = useCallback(
+    async (hotel: (typeof mockHotels)[0]): Promise<number> => {
       const existing = await searchLocalHotels(db, hotel.name);
-      let hotelId: number;
-
       if (existing.length > 0 && existing[0].name === hotel.name) {
-        hotelId = existing[0].id;
-      } else {
-        const created = await createHotel(db, {
-          name: hotel.name,
-          city: hotel.city,
-          country: hotel.country,
-          latitude: hotel.latitude,
-          longitude: hotel.longitude,
-          priceLevel: hotel.priceLevel,
-        });
-        hotelId = created.id;
-        await addTagsToHotel(db, hotelId, hotel.tags);
+        return existing[0].id;
       }
-
-      router.replace(`/hotel/${hotelId}`);
+      const created = await createHotel(db, {
+        name: hotel.name,
+        city: hotel.city,
+        country: hotel.country,
+        latitude: hotel.latitude,
+        longitude: hotel.longitude,
+        priceLevel: hotel.priceLevel,
+      });
+      await addTagsToHotel(db, created.id, hotel.tags);
+      return created.id;
     },
-    [db, router]
+    [db]
   );
 
-  const handleToggleSaved = useCallback(async (hotel: (typeof mockHotels)[0]) => {
-    const existing = await searchLocalHotels(db, hotel.name);
-    let hotelId: number;
+  const handleSelectHotel = useCallback(
+    async (hotel: (typeof mockHotels)[0]) => {
+      const hotelId = await getOrCreateHotelId(hotel);
+      router.replace(`/hotel/${hotelId}`);
+    },
+    [getOrCreateHotelId, router]
+  );
 
-    if (existing.length > 0 && existing[0].name === hotel.name) {
-      hotelId = existing[0].id;
-    } else {
-      const created = await createHotel(db, {
-        name: hotel.name,
-        city: hotel.city,
-        country: hotel.country,
-        latitude: hotel.latitude,
-        longitude: hotel.longitude,
-        priceLevel: hotel.priceLevel,
-      });
-      hotelId = created.id;
-      await addTagsToHotel(db, hotelId, hotel.tags);
-    }
+  /**
+   * Toggle saved (want) state.
+   * Uses the DAL toggleSave which correctly handles 'want' status and
+   * status transitions (want → been updates the record, same status removes it).
+   */
+  const handleToggleSaved = useCallback(
+    async (hotel: (typeof mockHotels)[0]) => {
+      const hotelId = await getOrCreateHotelId(hotel);
+      await toggleSave(db, 1, hotelId, 'want');
+      await loadStatuses();
+    },
+    [db, getOrCreateHotelId, loadStatuses]
+  );
 
-   const existingSave = await db
-  .select()
-  .from(schema.saves)
-  .where(eq(schema.saves.userId, 1));
-
-const userSave = existingSave.find((row) => row.hotelId === hotelId);
-
-    if (userSave) {
-      if (userSave.status === 'saved') {
-        await db.delete(schema.saves).where(eq(schema.saves.id, userSave.id));
-      } else {
-        await db
-          .update(schema.saves)
-          .set({ status: 'saved' })
-          .where(eq(schema.saves.id, userSave.id));
-      }
-    } else {
-      await db.insert(schema.saves).values({
-        userId: 1,
-        hotelId,
-        status: 'saved',
-      });
-    }
-
-    await loadStatuses();
-  }, [db, loadStatuses]);
-
-  const handleToggleSlept = useCallback(async (hotel: (typeof mockHotels)[0]) => {
-    const existing = await searchLocalHotels(db, hotel.name);
-    let hotelId: number;
-
-    if (existing.length > 0 && existing[0].name === hotel.name) {
-      hotelId = existing[0].id;
-    } else {
-      const created = await createHotel(db, {
-        name: hotel.name,
-        city: hotel.city,
-        country: hotel.country,
-        latitude: hotel.latitude,
-        longitude: hotel.longitude,
-        priceLevel: hotel.priceLevel,
-      });
-      hotelId = created.id;
-      await addTagsToHotel(db, hotelId, hotel.tags);
-    }
-
-    const existingSave = await db
-  .select()
-  .from(schema.saves)
-  .where(eq(schema.saves.userId, 1));
-
-const userSave = existingSave.find((row) => row.hotelId === hotelId);
-
-    if (userSave) {
-      if (userSave.status === 'slept') {
-        await db.delete(schema.saves).where(eq(schema.saves.id, userSave.id));
-      } else {
-        await db
-          .update(schema.saves)
-          .set({ status: 'slept' })
-          .where(eq(schema.saves.id, userSave.id));
-      }
-    } else {
-      await db.insert(schema.saves).values({
-        userId: 1,
-        hotelId,
-        status: 'slept',
-      });
-    }
-
-    await loadStatuses();
-  }, [db, loadStatuses]);
+  /**
+   * Toggle slept (been) state.
+   * When a hotel moves from 'want' → 'been' it is removed from Saved automatically
+   * (handled by toggleSave updating the status on the same record).
+   */
+  const handleToggleSlept = useCallback(
+    async (hotel: (typeof mockHotels)[0]) => {
+      const hotelId = await getOrCreateHotelId(hotel);
+      await toggleSave(db, 1, hotelId, 'been');
+      await loadStatuses();
+    },
+    [db, getOrCreateHotelId, loadStatuses]
+  );
 
   return (
     <SafeAreaView style={styles.safe}>

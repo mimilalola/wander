@@ -100,16 +100,18 @@ export default function SearchScreen() {
 
   /**
    * Toggle saved (want) state.
-   * Uses the DAL toggleSave which correctly handles 'want' status and
-   * status transitions (want → been updates the record, same status removes it).
+   * A hotel that is already slept ('been') cannot be re-added to the wishlist
+   * via the star button — it must be explicitly deleted from the slept list first.
+   * This prevents data inconsistency (orphaned visit records affecting stats/rankings).
    */
   const handleToggleSaved = useCallback(
     async (hotel: (typeof mockHotels)[0]) => {
+      if (sleptNames.has(hotel.name)) return;
       const hotelId = await getOrCreateHotelId(hotel);
       await toggleSave(db, 1, hotelId, 'want');
       await loadStatuses();
     },
-    [db, getOrCreateHotelId, loadStatuses]
+    [db, getOrCreateHotelId, loadStatuses, sleptNames]
   );
 
   /**

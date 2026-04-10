@@ -40,8 +40,8 @@ export default function ListScreen() {
   const db = createDb(sqlite);
   const [filter, setFilter] = useState('All');
   const [hotels, setHotels] = useState<SavedHotel[]>([]);
-  // Track open swipeable so we can close it when another opens
-  const openSwipeableRef = useRef<Swipeable | null>(null);
+  // Track all rendered swipeables by hotel id so we can close others on open
+  const swipeableRefs = useRef<Map<number, Swipeable>>(new Map());
 
   const loadHotels = useCallback(async () => {
     const results = await db
@@ -91,11 +91,18 @@ export default function ListScreen() {
           ? `Remove ${hotel.name}? This will also delete your visit history and photos.`
           : `Remove ${hotel.name} from your wishlist?`,
         [
-          { text: 'Cancel', style: 'cancel' },
+          {
+            text: 'Cancel',
+            style: 'cancel',
+            onPress: () => {
+              swipeableRefs.current.get(hotel.id)?.close();
+            },
+          },
           {
             text: 'Remove',
             style: 'destructive',
             onPress: async () => {
+              swipeableRefs.current.get(hotel.id)?.close();
               await removeSave(db, 1, hotel.id);
               await loadHotels();
             },
@@ -150,12 +157,15 @@ export default function ListScreen() {
           renderItem={({ item }) => (
             <Swipeable
               ref={(ref) => {
-                // Close the previously open swipeable when a new one opens
-                if (ref && openSwipeableRef.current && openSwipeableRef.current !== ref) {
-                  openSwipeableRef.current.close();
-                }
+                if (ref) swipeableRefs.current.set(item.id, ref);
+                else swipeableRefs.current.delete(item.id);
               }}
-              onSwipeableOpen={() => {}}
+              onSwipeableOpen={() => {
+                // Close every other open swipeable
+                swipeableRefs.current.forEach((ref, id) => {
+                  if (id !== item.id) ref.close();
+                });
+              }}
               renderRightActions={() => renderRightActions(item)}
               friction={2}
               rightThreshold={40}
@@ -170,8 +180,7 @@ export default function ListScreen() {
                 saveStatus={item.saveStatus}
                 rating={item.rating}
                 onPress={() => {
-                  // Close any open swipeable before navigating
-                  openSwipeableRef.current?.close();
+                  swipeableRefs.current.forEach((ref) => ref.close());
                   router.push(`/hotel/${item.id}`);
                 }}
               />

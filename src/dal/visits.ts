@@ -52,7 +52,9 @@ export async function updateVisitRank(db: Database, visitId: number, newRank: nu
 
 /**
  * Get all valid (0–10 scale) scores for a user's visits, sorted descending.
- * Excludes legacy Elo scores (which are > 10).
+ * Only includes hotels still marked as 'been' (slept) — excludes any orphaned
+ * visit records that no longer have an active save entry.
+ * Also excludes legacy Elo scores (which are > 10).
  */
 export async function getAllVisitScoresForUser(
   db: Database,
@@ -61,23 +63,51 @@ export async function getAllVisitScoresForUser(
   const results = await db
     .select({ rank: schema.visits.rank })
     .from(schema.visits)
+    .innerJoin(
+      schema.saves,
+      and(
+        eq(schema.visits.hotelId, schema.saves.hotelId),
+        eq(schema.visits.userId, schema.saves.userId)
+      )
+    )
     .where(
       sql`${schema.visits.userId} = ${userId}
+          AND ${schema.saves.status} = 'been'
           AND ${schema.visits.rank} IS NOT NULL
           AND ${schema.visits.rank} <= 10.0`
     );
 
-  return (results.map((r) => r.rank as number)).sort((a, b) => b - a);
+  return results.map((r) => r.rank as number).sort((a, b) => b - a);
 }
 
 /**
  * Get the visit currently holding the top rank (10.0), if any.
+ * Only considers hotels with an active 'been' save record.
  */
 export async function getTopRankedVisit(db: Database, userId: number) {
   const results = await db
-    .select()
+    .select({
+      id: schema.visits.id,
+      userId: schema.visits.userId,
+      hotelId: schema.visits.hotelId,
+      rating: schema.visits.rating,
+      rank: schema.visits.rank,
+      notes: schema.visits.notes,
+      createdAt: schema.visits.createdAt,
+    })
     .from(schema.visits)
-    .where(sql`${schema.visits.userId} = ${userId} AND ${schema.visits.rank} = 10.0`)
+    .innerJoin(
+      schema.saves,
+      and(
+        eq(schema.visits.hotelId, schema.saves.hotelId),
+        eq(schema.visits.userId, schema.saves.userId)
+      )
+    )
+    .where(
+      sql`${schema.visits.userId} = ${userId}
+          AND ${schema.saves.status} = 'been'
+          AND ${schema.visits.rank} = 10.0`
+    )
     .limit(1);
   return results[0] ?? null;
 }
@@ -86,6 +116,7 @@ export async function getTopRankedVisit(db: Database, userId: number) {
  * Get up to 5 comparison candidates within the same tier score range.
  * The current top-ranked hotel (10.0) is always placed first if present in the tier,
  * ensuring the new hotel always gets a chance to compete for the top spot.
+ * Only includes hotels with an active 'been' save record.
  */
 export async function getComparisonCandidates(
   db: Database,
@@ -101,9 +132,17 @@ export async function getComparisonCandidates(
     })
     .from(schema.visits)
     .innerJoin(schema.hotels, eq(schema.visits.hotelId, schema.hotels.id))
+    .innerJoin(
+      schema.saves,
+      and(
+        eq(schema.visits.hotelId, schema.saves.hotelId),
+        eq(schema.visits.userId, schema.saves.userId)
+      )
+    )
     .where(
       sql`${schema.visits.userId} = ${userId}
           AND ${schema.visits.hotelId} != ${excludeHotelId}
+          AND ${schema.saves.status} = 'been'
           AND ${schema.visits.rank} IS NOT NULL
           AND ${schema.visits.rank} >= ${tierMin}
           AND ${schema.visits.rank} <= ${tierMax}`

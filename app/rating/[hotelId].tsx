@@ -120,15 +120,23 @@ export default function RatingScreen() {
       }
 
       case 'compare': {
-        // User pressed "Next" to skip remaining comparisons
-        // Compute score with whatever comparison data we have so far
+        // User pressed "Next" to skip remaining comparisons.
+        // Compute score using any partial comparison data already collected.
         if (rating !== null) {
           const tier = getTier(rating);
           const bounds = TIER_BOUNDS[tier];
           const tierScores = allExistingScores.filter(
             (s) => s >= bounds.min && s <= bounds.max
           );
-          const score = computeInsertionScore([], [], tier, tierScores);
+          const partialWins: number[] = [];
+          const partialLosses: number[] = [];
+          for (let i = 0; i < compIndex; i++) {
+            const comp = comparisons[i];
+            const score = comp.visit.rank ?? 0;
+            if ((comp as any).__won === true) partialWins.push(score);
+            else if ((comp as any).__won === false) partialLosses.push(score);
+          }
+          const score = computeInsertionScore(partialWins, partialLosses, tier, tierScores);
           setNewVisitRank(score);
         }
         setStep('notes');
@@ -243,7 +251,24 @@ export default function RatingScreen() {
   };
 
   const handleSave = async () => {
-    if (!newVisitId) return;
+    if (!newVisitId || rating === null) return;
+
+    // Final enforcement of the "only ONE 10.0" rule.
+    // This covers any path that assigned 10.0 without going through the last
+    // comparison (e.g. first-ever loved hotel, or skip with no prior top).
+    if (newVisitRank !== null && newVisitRank >= 10.0) {
+      const currentTop = await getTopRankedVisit(db, 1);
+      if (currentTop && currentTop.id !== newVisitId) {
+        const allScores = await getAllVisitScoresForUser(db, 1);
+        const tier = getTier(rating);
+        const bounds = TIER_BOUNDS[tier];
+        const tierScores = allScores.filter((s) => s >= bounds.min && s <= bounds.max);
+        const scoresBelow10 = tierScores.filter((s) => s < 10.0).sort((a, b) => b - a);
+        const nextScore = scoresBelow10.length > 0 ? scoresBelow10[0] : 9.0;
+        const newOldTopScore = Math.round(((10.0 + nextScore) / 2) * 10) / 10;
+        await updateVisitRank(db, currentTop.id, newOldTopScore);
+      }
+    }
 
     // Persist the insertion-based score and notes
     await sqlite.runAsync(
@@ -255,21 +280,29 @@ export default function RatingScreen() {
       await addPhotos(db, newVisitId, photoUris);
     }
 
-    // Return directly to Reception (home tab), closing rating and hotel detail
-    router.navigate('/(tabs)');
+    // Close rating flow and return directly to Reception (home tab)
+    router.navigate('/(tabs)/');
   };
 
   const handleSkip = () => {
     switch (step) {
       case 'compare': {
-        // Skip remaining comparisons — assign tier default based on data so far
+        // Skip remaining comparisons — use any partial data already collected.
         if (rating !== null) {
           const tier = getTier(rating);
           const bounds = TIER_BOUNDS[tier];
           const tierScores = allExistingScores.filter(
             (s) => s >= bounds.min && s <= bounds.max
           );
-          const score = computeInsertionScore([], [], tier, tierScores);
+          const partialWins: number[] = [];
+          const partialLosses: number[] = [];
+          for (let i = 0; i < compIndex; i++) {
+            const comp = comparisons[i];
+            const score = comp.visit.rank ?? 0;
+            if ((comp as any).__won === true) partialWins.push(score);
+            else if ((comp as any).__won === false) partialLosses.push(score);
+          }
+          const score = computeInsertionScore(partialWins, partialLosses, tier, tierScores);
           setNewVisitRank(score);
         }
         setStep('notes');

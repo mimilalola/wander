@@ -1,4 +1,4 @@
-import { eq, sql } from 'drizzle-orm';
+import { eq, sql, and } from 'drizzle-orm';
 import { type Database } from '../db/client';
 import * as schema from '../db/schema';
 import type { ProfileStats } from '../types';
@@ -23,15 +23,28 @@ export async function getProfileStats(db: Database, userId: number): Promise<Pro
     .from(schema.saves)
     .where(sql`${schema.saves.userId} = ${userId} AND ${schema.saves.status} = 'want'`);
 
+  // All visit-based stats join with saves to only count hotels actively marked
+  // as 'been' (slept). This prevents deleted or de-listed hotels from inflating stats.
+  const beenJoin = and(
+    eq(schema.visits.hotelId, schema.saves.hotelId),
+    eq(schema.visits.userId, schema.saves.userId)
+  );
+
   const visitedResult = await db
     .select({ count: sql<number>`COUNT(DISTINCT ${schema.visits.hotelId})` })
     .from(schema.visits)
-    .where(eq(schema.visits.userId, userId));
+    .innerJoin(schema.saves, beenJoin)
+    .where(and(eq(schema.visits.userId, userId), eq(schema.saves.status, 'been')));
 
   const avgResult = await db
     .select({ avg: sql<number | null>`AVG(${schema.visits.rating})` })
     .from(schema.visits)
-    .where(sql`${schema.visits.userId} = ${userId} AND ${schema.visits.rating} IS NOT NULL`);
+    .innerJoin(schema.saves, beenJoin)
+    .where(
+      sql`${schema.visits.userId} = ${userId}
+          AND ${schema.saves.status} = 'been'
+          AND ${schema.visits.rating} IS NOT NULL`
+    );
 
   const topCities = await db
     .select({
@@ -40,7 +53,8 @@ export async function getProfileStats(db: Database, userId: number): Promise<Pro
     })
     .from(schema.visits)
     .innerJoin(schema.hotels, eq(schema.visits.hotelId, schema.hotels.id))
-    .where(eq(schema.visits.userId, userId))
+    .innerJoin(schema.saves, beenJoin)
+    .where(and(eq(schema.visits.userId, userId), eq(schema.saves.status, 'been')))
     .groupBy(schema.hotels.city)
     .orderBy(sql`COUNT(*) DESC`)
     .limit(5);
@@ -49,7 +63,8 @@ export async function getProfileStats(db: Database, userId: number): Promise<Pro
     .select({ count: sql<number>`COUNT(DISTINCT ${schema.hotels.country})` })
     .from(schema.visits)
     .innerJoin(schema.hotels, eq(schema.visits.hotelId, schema.hotels.id))
-    .where(eq(schema.visits.userId, userId));
+    .innerJoin(schema.saves, beenJoin)
+    .where(and(eq(schema.visits.userId, userId), eq(schema.saves.status, 'been')));
 
   const topTags = await db
     .select({
@@ -59,7 +74,8 @@ export async function getProfileStats(db: Database, userId: number): Promise<Pro
     .from(schema.visits)
     .innerJoin(schema.hotelTags, eq(schema.visits.hotelId, schema.hotelTags.hotelId))
     .innerJoin(schema.tags, eq(schema.hotelTags.tagId, schema.tags.id))
-    .where(eq(schema.visits.userId, userId))
+    .innerJoin(schema.saves, beenJoin)
+    .where(and(eq(schema.visits.userId, userId), eq(schema.saves.status, 'been')))
     .groupBy(schema.tags.name)
     .orderBy(sql`COUNT(*) DESC`)
     .limit(5);

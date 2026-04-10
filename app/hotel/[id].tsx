@@ -60,6 +60,10 @@ export default function HotelDetailScreen() {
 
   const handleWant = async () => {
     if (!hotel) return;
+    // A slept hotel cannot be re-saved as 'want' — it must be explicitly
+    // deleted first. Allowing the transition would leave visit data in an
+    // inconsistent state (orphaned visits affecting stats and rankings).
+    if (hotel.save?.status === 'been') return;
     await toggleSave(db, 1, hotel.id, 'want');
     loadHotel();
   };

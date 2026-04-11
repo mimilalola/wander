@@ -39,7 +39,7 @@ export const visits = sqliteTable('visits', {
   userId: integer('user_id').notNull().references(() => users.id),
   hotelId: integer('hotel_id').notNull().references(() => hotels.id),
   rating: integer('rating'),
-  rank: real('rank').default(1500),
+  rank: real('rank'),
   notes: text('notes'),
   createdAt: text('created_at').notNull().default(sql`CURRENT_TIMESTAMP`),
 });

@@ -31,7 +31,7 @@ interface SavedHotel {
   priceLevel: number | null;
   coverPhoto: string | null;
   saveStatus: SaveStatus;
-  rating: number | null;
+  rank: number | null;
 }
 
 export default function ListScreen() {
@@ -59,21 +59,26 @@ export default function ListScreen() {
       .where(eq(schema.saves.userId, 1))
       .orderBy(desc(schema.saves.createdAt));
 
-    const withRatings: SavedHotel[] = [];
+    const withRanks: SavedHotel[] = [];
     for (const h of results) {
-      const visit = await db
-        .select({ rating: schema.visits.rating })
-        .from(schema.visits)
-        .where(sql`${schema.visits.userId} = 1 AND ${schema.visits.hotelId} = ${h.id}`)
-        .orderBy(desc(schema.visits.createdAt))
-        .limit(1);
-      withRatings.push({
-        ...h,
-        saveStatus: h.saveStatus as SaveStatus,
-        rating: visit[0]?.rating ?? null,
-      });
+      // Only 'been' hotels have visit/rank data; 'want' hotels have neither.
+      if (h.saveStatus === 'been') {
+        const visit = await db
+          .select({ rank: schema.visits.rank })
+          .from(schema.visits)
+          .where(sql`${schema.visits.userId} = 1 AND ${schema.visits.hotelId} = ${h.id} AND ${schema.visits.rank} IS NOT NULL`)
+          .orderBy(desc(schema.visits.createdAt))
+          .limit(1);
+        withRanks.push({
+          ...h,
+          saveStatus: h.saveStatus as SaveStatus,
+          rank: visit[0]?.rank ?? null,
+        });
+      } else {
+        withRanks.push({ ...h, saveStatus: h.saveStatus as SaveStatus, rank: null });
+      }
     }
-    setHotels(withRatings);
+    setHotels(withRanks);
   }, []);
 
   useFocusEffect(
@@ -167,9 +172,10 @@ export default function ListScreen() {
                 });
               }}
               renderRightActions={() => renderRightActions(item)}
-              friction={2}
+              friction={1}
               rightThreshold={40}
               overshootRight={false}
+              overshootFriction={8}
             >
               <HotelCard
                 name={item.name}
@@ -178,7 +184,7 @@ export default function ListScreen() {
                 priceLevel={item.priceLevel}
                 coverPhoto={item.coverPhoto}
                 saveStatus={item.saveStatus}
-                rating={item.rating}
+                rating={item.rank}
                 onPress={() => {
                   swipeableRefs.current.forEach((ref) => ref.close());
                   router.push(`/hotel/${item.id}`);

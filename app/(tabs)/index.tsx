@@ -22,7 +22,7 @@ interface HotelRow {
   priceLevel: number | null;
   coverPhoto: string | null;
   saveStatus: SaveStatus | null;
-  rating: number | null;
+  rank: number | null;
 }
 
 export default function HomeScreen() {
@@ -33,7 +33,8 @@ export default function HomeScreen() {
   const [viewMode, setViewMode] = useState('Recent');
 
   const loadHotels = useCallback(async () => {
-    const results = await db
+    // Step 1: fetch all saved hotels ordered by most recently saved.
+    const saveResults = await db
       .select({
         id: schema.hotels.id,
         name: schema.hotels.name,
@@ -42,25 +43,32 @@ export default function HomeScreen() {
         priceLevel: schema.hotels.priceLevel,
         coverPhoto: schema.hotels.coverPhoto,
         saveStatus: schema.saves.status,
-        rating: schema.visits.rating,
       })
       .from(schema.saves)
       .innerJoin(schema.hotels, eq(schema.saves.hotelId, schema.hotels.id))
-      .leftJoin(
-        schema.visits,
-        sql`${schema.visits.hotelId} = ${schema.hotels.id} AND ${schema.visits.userId} = ${schema.saves.userId}`
-      )
       .where(eq(schema.saves.userId, 1))
       .orderBy(desc(schema.saves.createdAt))
       .limit(50);
 
-    const deduped = new Map<number, HotelRow>();
-    for (const r of results) {
-      if (!deduped.has(r.id)) {
-        deduped.set(r.id, r as HotelRow);
+    // Step 2: for each 'been' hotel fetch the latest insertion-rank from visits.
+    // 'want' hotels have no visit data so rank stays null.
+    const withRanks: HotelRow[] = [];
+    for (const h of saveResults) {
+      let rank: number | null = null;
+      if (h.saveStatus === 'been') {
+        const visit = await db
+          .select({ rank: schema.visits.rank })
+          .from(schema.visits)
+          .where(
+            sql`${schema.visits.userId} = 1 AND ${schema.visits.hotelId} = ${h.id} AND ${schema.visits.rank} IS NOT NULL`
+          )
+          .orderBy(desc(schema.visits.createdAt))
+          .limit(1);
+        rank = visit[0]?.rank ?? null;
       }
+      withRanks.push({ ...h, saveStatus: h.saveStatus as SaveStatus, rank });
     }
-    setHotels(Array.from(deduped.values()));
+    setHotels(withRanks);
   }, []);
 
   useFocusEffect(
@@ -92,10 +100,12 @@ export default function HomeScreen() {
         <FlatList
           data={hotels.filter((h) => {
             if (viewMode === 'Want') return h.saveStatus === 'want';
-            if (viewMode === 'Top Rated') return h.rating !== null;
+            // Top Rated: only slept hotels that have a computed insertion rank
+            if (viewMode === 'Top Rated') return h.saveStatus === 'been' && h.rank !== null;
             return true;
           }).sort((a, b) => {
-            if (viewMode === 'Top Rated') return (b.rating ?? 0) - (a.rating ?? 0);
+            // Sort by insertion rank (highest first); ties preserve list order
+            if (viewMode === 'Top Rated') return (b.rank ?? 0) - (a.rank ?? 0);
             return 0;
           })}
           keyExtractor={(item) => item.id.toString()}
@@ -108,7 +118,7 @@ export default function HomeScreen() {
               priceLevel={item.priceLevel}
               coverPhoto={item.coverPhoto}
               saveStatus={item.saveStatus}
-              rating={item.rating}
+              rating={item.rank}
               onPress={() => router.push(`/hotel/${item.id}`)}
             />
           )}

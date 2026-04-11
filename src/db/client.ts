@@ -53,7 +53,7 @@ export async function initializeDatabase(db: SQLiteDatabase) {
       user_id INTEGER NOT NULL REFERENCES users(id),
       hotel_id INTEGER NOT NULL REFERENCES hotels(id),
       rating INTEGER,
-      rank REAL DEFAULT 1500,
+      rank REAL,
       notes TEXT,
       created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
     );
@@ -85,6 +85,10 @@ export async function initializeDatabase(db: SQLiteDatabase) {
     );
 
     INSERT OR IGNORE INTO users (id, name, username) VALUES (1, 'Traveler', 'traveler');
+
+    -- Nullify legacy Elo scores (rank = 1500 from old system).
+    -- These are not valid insertion scores and must not affect rankings or stats.
+    UPDATE visits SET rank = NULL WHERE rank > 10.0;
 
     INSERT OR IGNORE INTO tags (name) VALUES
       ('beach'), ('countryside'), ('city'), ('boutique'),

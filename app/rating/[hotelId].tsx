@@ -280,8 +280,10 @@ export default function RatingScreen() {
       await addPhotos(db, newVisitId, photoUris);
     }
 
-    // Close rating flow and return directly to Reception (home tab)
-    router.navigate('/(tabs)/');
+    // Dismiss the fullScreenModal (and any other modals), then replace the
+    // remaining stack with the Reception tab so the back button is clean.
+    router.dismissAll();
+    router.replace('/(tabs)');
   };
 
   const handleSkip = () => {

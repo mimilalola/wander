@@ -20,7 +20,7 @@ import { RatingSlider } from '../../src/components/RatingSlider';
 import { ComparisonCard } from '../../src/components/ComparisonCard';
 import { createDb } from '../../src/db/client';
 import { getHotelById } from '../../src/dal/hotels';
-import { toggleSave } from '../../src/dal/saves';
+import { toggleSave, getSaveForHotel } from '../../src/dal/saves';
 import {
   createVisit,
   getComparisonCandidates,
@@ -86,8 +86,14 @@ export default function RatingScreen() {
         });
         setNewVisitId(visit.id);
 
-        // Transition save status: want → been (removes from Saved, adds to Slept)
-        await toggleSave(db, 1, parseInt(hotelId!), 'been');
+        // Transition save status: want → been (removes from Saved, adds to Slept).
+        // Guard: if the hotel is already 'been', calling toggleSave('been') would
+        // toggle it OFF (cascade-deleting all visits/photos). Only call it when
+        // the transition is actually needed.
+        const existingSave = await getSaveForHotel(db, 1, parseInt(hotelId!));
+        if (!existingSave || existingSave.status !== 'been') {
+          await toggleSave(db, 1, parseInt(hotelId!), 'been');
+        }
 
         // Load all existing scores for insertion score context
         const allScores = await getAllVisitScoresForUser(db, 1);

@@ -70,6 +70,11 @@ export default function HotelDetailScreen() {
 
   const handleBeen = () => {
     if (!hotel) return;
+    // A hotel that is already slept must not re-open the ranking flow.
+    // Doing so would cause toggleSave('been') inside the rating screen to
+    // toggle OFF the save (cascade-deleting all visit data), and would create
+    // a second unintended visit record for the same hotel.
+    if (hotel.save?.status === 'been') return;
     router.push(`/rating/${hotel.id}`);
   };
 

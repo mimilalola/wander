@@ -11,7 +11,7 @@ import {
 import { useRouter, useFocusEffect } from 'expo-router';
 import { useSQLiteContext } from 'expo-sqlite';
 import { eq, sql, desc } from 'drizzle-orm';
-import Swipeable from 'react-native-gesture-handler/Swipeable';
+import ReanimatedSwipeable from 'react-native-gesture-handler/ReanimatedSwipeable';
 import { Ionicons } from '@expo/vector-icons';
 import { HotelCard } from '../../src/components/HotelCard';
 import { SegmentControl } from '../../src/components/SegmentControl';
@@ -41,7 +41,7 @@ export default function ListScreen() {
   const [filter, setFilter] = useState('All');
   const [hotels, setHotels] = useState<SavedHotel[]>([]);
   // Track all rendered swipeables by hotel id so we can close others on open
-  const swipeableRefs = useRef<Map<number, Swipeable>>(new Map());
+  const swipeableRefs = useRef<Map<number, { close: () => void }>>(new Map());
 
   const loadHotels = useCallback(async () => {
     const results = await db
@@ -160,7 +160,7 @@ export default function ListScreen() {
           keyExtractor={(item) => item.id.toString()}
           contentContainerStyle={styles.listContent}
           renderItem={({ item }) => (
-            <Swipeable
+            <ReanimatedSwipeable
               ref={(ref) => {
                 if (ref) swipeableRefs.current.set(item.id, ref);
                 else swipeableRefs.current.delete(item.id);
@@ -172,7 +172,7 @@ export default function ListScreen() {
                 });
               }}
               renderRightActions={() => renderRightActions(item)}
-              friction={1}
+              friction={2}
               rightThreshold={40}
               overshootRight={false}
               overshootFriction={8}
@@ -190,7 +190,7 @@ export default function ListScreen() {
                   router.push(`/hotel/${item.id}`);
                 }}
               />
-            </Swipeable>
+            </ReanimatedSwipeable>
           )}
           ListEmptyComponent={
             <EmptyState

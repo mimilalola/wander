@@ -42,7 +42,19 @@ export async function getVisitedHotels(db: Database, userId: number) {
     })
     .from(schema.visits)
     .innerJoin(schema.hotels, eq(schema.visits.hotelId, schema.hotels.id))
-    .where(eq(schema.visits.userId, userId))
+    .innerJoin(
+      schema.saves,
+      and(
+        eq(schema.visits.hotelId, schema.saves.hotelId),
+        eq(schema.visits.userId, schema.saves.userId)
+      )
+    )
+    .where(
+      and(
+        eq(schema.visits.userId, userId),
+        eq(schema.saves.status, 'been')
+      )
+    )
     .orderBy(desc(schema.visits.createdAt));
 }
 

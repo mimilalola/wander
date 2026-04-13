@@ -8,6 +8,7 @@ import {
   TouchableOpacity,
   Alert,
 } from 'react-native';
+import { NativeViewGestureHandler } from 'react-native-gesture-handler';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { useSQLiteContext } from 'expo-sqlite';
 import { eq, sql, desc } from 'drizzle-orm';
@@ -40,6 +41,11 @@ export default function ListScreen() {
   const db = createDb(sqlite);
   const [filter, setFilter] = useState('All');
   const [hotels, setHotels] = useState<SavedHotel[]>([]);
+  // Ref used by each swipeable's simultaneousHandlers so the FlatList scroll
+  // gesture and the swipe gesture are recognised at the same time — prevents
+  // the "multiple swipes needed" issue where the list scroll gesture consumed
+  // the first swipe attempt.
+  const scrollHandlerRef = useRef(null);
   // Track all rendered swipeables by hotel id so we can close others on open
   const swipeableRefs = useRef<Map<number, { close: () => void }>>(new Map());
 
@@ -107,15 +113,19 @@ export default function ListScreen() {
             text: 'Remove',
             style: 'destructive',
             onPress: async () => {
-              swipeableRefs.current.get(hotel.id)?.close();
+              // Optimistically remove the item from the UI immediately.
+              // This avoids the jitter / stuck-swipeable state that occurred
+              // when we waited for the DB delete + full list reload before
+              // updating the rendered list.
+              setHotels((prev) => prev.filter((h) => h.id !== hotel.id));
+              // Cascade-delete save → visits → photos from the database.
               await removeSave(db, 1, hotel.id);
-              await loadHotels();
             },
           },
         ]
       );
     },
-    [db, loadHotels]
+    [db]
   );
 
   // Filter using the correct DB status values ('want' = Saved, 'been' = Slept)
@@ -155,58 +165,68 @@ export default function ListScreen() {
           />
         </View>
 
-        <FlatList
-          data={filtered}
-          keyExtractor={(item) => item.id.toString()}
-          contentContainerStyle={styles.listContent}
-          renderItem={({ item }) => (
-            <ReanimatedSwipeable
-              ref={(ref) => {
-                if (ref) swipeableRefs.current.set(item.id, ref);
-                else swipeableRefs.current.delete(item.id);
-              }}
-              onSwipeableOpen={() => {
-                // Close every other open swipeable
-                swipeableRefs.current.forEach((ref, id) => {
-                  if (id !== item.id) ref.close();
-                });
-              }}
-              renderRightActions={() => renderRightActions(item)}
-              friction={2}
-              rightThreshold={40}
-              overshootRight={false}
-              overshootFriction={8}
-            >
-              <HotelCard
-                name={item.name}
-                city={item.city}
-                country={item.country}
-                priceLevel={item.priceLevel}
-                coverPhoto={item.coverPhoto}
-                saveStatus={item.saveStatus}
-                rating={item.rank}
-                onPress={() => {
-                  swipeableRefs.current.forEach((ref) => ref.close());
-                  router.push(`/hotel/${item.id}`);
+        {/*
+          NativeViewGestureHandler wraps the FlatList so its scroll gesture
+          and the swipeable's pan gesture are handled simultaneously.
+          The ref is forwarded to each ReanimatedSwipeable via simultaneousHandlers
+          which tells RNGH to let both gestures recognise at once instead of
+          competing — fixing the "swipe absorbed by scroll" bug.
+        */}
+        <NativeViewGestureHandler ref={scrollHandlerRef} disallowInterruption>
+          <FlatList
+            data={filtered}
+            keyExtractor={(item) => item.id.toString()}
+            contentContainerStyle={styles.listContent}
+            renderItem={({ item }) => (
+              <ReanimatedSwipeable
+                ref={(ref) => {
+                  if (ref) swipeableRefs.current.set(item.id, ref);
+                  else swipeableRefs.current.delete(item.id);
                 }}
+                simultaneousHandlers={scrollHandlerRef}
+                onSwipeableOpen={() => {
+                  // Close every other open swipeable
+                  swipeableRefs.current.forEach((ref, id) => {
+                    if (id !== item.id) ref.close();
+                  });
+                }}
+                renderRightActions={() => renderRightActions(item)}
+                friction={1}
+                rightThreshold={40}
+                overshootRight={false}
+                overshootFriction={8}
+              >
+                <HotelCard
+                  name={item.name}
+                  city={item.city}
+                  country={item.country}
+                  priceLevel={item.priceLevel}
+                  coverPhoto={item.coverPhoto}
+                  saveStatus={item.saveStatus}
+                  rating={item.rank}
+                  onPress={() => {
+                    swipeableRefs.current.forEach((ref) => ref.close());
+                    router.push(`/hotel/${item.id}`);
+                  }}
+                />
+              </ReanimatedSwipeable>
+            )}
+            ListEmptyComponent={
+              <EmptyState
+                icon="bookmark-outline"
+                message={
+                  filter === 'Saved'
+                    ? 'No hotels on your wishlist yet'
+                    : filter === 'Slept'
+                    ? "You haven't marked any hotels as visited"
+                    : 'Start saving hotels to build your list'
+                }
+                actionLabel="Search Hotels"
+                onAction={() => router.push('/search')}
               />
-            </ReanimatedSwipeable>
-          )}
-          ListEmptyComponent={
-            <EmptyState
-              icon="bookmark-outline"
-              message={
-                filter === 'Saved'
-                  ? 'No hotels on your wishlist yet'
-                  : filter === 'Slept'
-                  ? "You haven't marked any hotels as visited"
-                  : 'Start saving hotels to build your list'
-              }
-              actionLabel="Search Hotels"
-              onAction={() => router.push('/search')}
-            />
-          }
-        />
+            }
+          />
+        </NativeViewGestureHandler>
       </View>
     </SafeAreaView>
   );

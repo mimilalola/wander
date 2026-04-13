@@ -260,15 +260,24 @@ export default function RatingScreen() {
     if (!newVisitId || rating === null) return;
 
     // Final enforcement of the "only ONE 10.0" rule.
-    // This covers any path that assigned 10.0 without going through the last
-    // comparison (e.g. first-ever loved hotel, or skip with no prior top).
+    // Covers every path that resolves to 10.0:
+    //   • first-ever "Loved it" (no candidates → tier max = 10.0)
+    //   • beat all comparison candidates
+    //   • skip comparisons when already the only hotel in tier
+    // We read the current DB top here (not from state) because handleComparison
+    // may already have downgraded it.  If so, getTopRankedVisit returns null
+    // and we skip the downgrade safely.
     if (newVisitRank !== null && newVisitRank >= 10.0) {
       const currentTop = await getTopRankedVisit(db, 1);
+      // Only downgrade if there is an existing top that is NOT this new visit
+      // (the new visit still has rank = null in the DB at this point).
       if (currentTop && currentTop.id !== newVisitId) {
         const allScores = await getAllVisitScoresForUser(db, 1);
         const tier = getTier(rating);
         const bounds = TIER_BOUNDS[tier];
         const tierScores = allScores.filter((s) => s >= bounds.min && s <= bounds.max);
+        // Place the displaced top between 10.0 and the next score below it.
+        // Fallback to 9.0 when it was the only loved hotel so it lands at 9.5.
         const scoresBelow10 = tierScores.filter((s) => s < 10.0).sort((a, b) => b - a);
         const nextScore = scoresBelow10.length > 0 ? scoresBelow10[0] : 9.0;
         const newOldTopScore = Math.round(((10.0 + nextScore) / 2) * 10) / 10;
@@ -276,7 +285,7 @@ export default function RatingScreen() {
       }
     }
 
-    // Persist the insertion-based score and notes
+    // Persist the insertion-based rank and notes for this visit
     await sqlite.runAsync(
       `UPDATE visits SET notes = ?, rank = ? WHERE id = ?`,
       [notes || null, newVisitRank, newVisitId]
@@ -286,10 +295,11 @@ export default function RatingScreen() {
       await addPhotos(db, newVisitId, photoUris);
     }
 
-    // Dismiss the fullScreenModal (and any other modals), then replace the
-    // remaining stack with the Reception tab so the back button is clean.
+    // Close the fullScreenModal stack entirely, then navigate to the
+    // Reception (home/index) tab so the user never lands back on the
+    // hotel detail or search screens.
     router.dismissAll();
-    router.replace('/(tabs)');
+    router.navigate('/(tabs)/');
   };
 
   const handleSkip = () => {

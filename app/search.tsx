@@ -99,33 +99,51 @@ export default function SearchScreen() {
   );
 
   /**
-   * Toggle saved (want) state.
+   * Toggle saved (want) state with an optimistic UI update.
    * A hotel that is already slept ('been') cannot be re-added to the wishlist
-   * via the star button — it must be explicitly deleted from the slept list first.
-   * This prevents data inconsistency (orphaned visit records affecting stats/rankings).
+   * — the star button is a no-op for those.
    */
   const handleToggleSaved = useCallback(
     async (hotel: (typeof mockHotels)[0]) => {
       if (sleptNames.has(hotel.name)) return;
+
+      // Optimistic update: flip the star instantly so the user sees feedback
+      // before the DB round-trip completes.
+      const wasSaved = savedNames.has(hotel.name);
+      setSavedNames((prev) => {
+        const next = new Set(prev);
+        wasSaved ? next.delete(hotel.name) : next.add(hotel.name);
+        return next;
+      });
+
       const hotelId = await getOrCreateHotelId(hotel);
       await toggleSave(db, 1, hotelId, 'want');
+      // Re-sync from DB to handle any edge cases (e.g. concurrent changes)
       await loadStatuses();
     },
-    [db, getOrCreateHotelId, loadStatuses, sleptNames]
+    [db, getOrCreateHotelId, loadStatuses, savedNames, sleptNames]
   );
 
   /**
-   * Toggle slept (been) state.
-   * When a hotel moves from 'want' → 'been' it is removed from Saved automatically
-   * (handled by toggleSave updating the status on the same record).
+   * Navigate to the hotel detail screen so the user can go through the full
+   * rating/ranking flow via the "Been" button there.
+   *
+   * We intentionally do NOT directly toggle the 'been' status here because:
+   *   1. It would bypass the rating/comparison/ranking flow entirely.
+   *   2. A hotel marked 'been' without a visit record would have no rank data,
+   *      corrupting the ranking list.
+   *   3. If the hotel is already slept, calling toggleSave('been') would
+   *      cascade-DELETE all its visits and photos.
+   *
+   * The "Been" button on the hotel detail screen has the correct guards and
+   * navigates to the rating flow.
    */
-  const handleToggleSlept = useCallback(
+  const handleNavigateToHotel = useCallback(
     async (hotel: (typeof mockHotels)[0]) => {
       const hotelId = await getOrCreateHotelId(hotel);
-      await toggleSave(db, 1, hotelId, 'been');
-      await loadStatuses();
+      router.push(`/hotel/${hotelId}`);
     },
-    [db, getOrCreateHotelId, loadStatuses]
+    [getOrCreateHotelId, router]
   );
 
   return (
@@ -159,7 +177,7 @@ export default function SearchScreen() {
               isSaved={savedNames.has(item.name)}
               isSlept={sleptNames.has(item.name)}
               onToggleSaved={() => handleToggleSaved(item)}
-              onToggleSlept={() => handleToggleSlept(item)}
+              onToggleSlept={() => handleNavigateToHotel(item)}
               onPress={() => handleSelectHotel(item)}
             />
           )}

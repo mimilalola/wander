@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   View,
   Text,
@@ -46,7 +46,7 @@ export default function RatingScreen() {
   const { hotelId } = useLocalSearchParams<{ hotelId: string }>();
   const router = useRouter();
   const sqlite = useSQLiteContext();
-  const db = createDb(sqlite);
+  const db = useMemo(() => createDb(sqlite), [sqlite]);
 
   const [step, setStep] = useState<Step>('rate');
   const [hotelName, setHotelName] = useState('');
@@ -295,11 +295,13 @@ export default function RatingScreen() {
       await addPhotos(db, newVisitId, photoUris);
     }
 
-    // Close the fullScreenModal stack entirely, then navigate to the
-    // Reception (home/index) tab so the user never lands back on the
-    // hotel detail or search screens.
+    // Dismiss all modals (rating + search, both modal presentation) then
+    // REPLACE whatever non-modal screen remains (hotel/[id] is a plain push
+    // and won't be dismissed by dismissAll) with the Reception tab.
+    // Using replace — not navigate — ensures hotel detail and search are
+    // fully removed from the back-stack so pressing back doesn't return there.
     router.dismissAll();
-    router.navigate('/(tabs)/');
+    router.replace('/(tabs)/');
   };
 
   const handleSkip = () => {

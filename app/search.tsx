@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useMemo, useEffect } from 'react';
+import React, { useState, useCallback, useMemo } from 'react';
 import { View, Text, StyleSheet, FlatList, SafeAreaView, TouchableOpacity } from 'react-native';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { useSQLiteContext } from 'expo-sqlite';
@@ -17,7 +17,7 @@ import { mockHotels } from '../src/data/mock-hotels';
 export default function SearchScreen() {
   const router = useRouter();
   const sqlite = useSQLiteContext();
-  const db = createDb(sqlite);
+  const db = useMemo(() => createDb(sqlite), [sqlite]);
 
   const [query, setQuery] = useState('');
   // savedNames = hotels with status 'want', sleptNames = hotels with status 'been'
@@ -46,15 +46,13 @@ export default function SearchScreen() {
     setSleptNames(nextSlept);
   }, [db]);
 
+  // Reload save statuses every time the screen comes into focus.
+  // useFocusEffect also fires on initial mount, so no separate useEffect needed.
   useFocusEffect(
     useCallback(() => {
       loadStatuses();
     }, [loadStatuses])
   );
-
-  useEffect(() => {
-    loadStatuses();
-  }, [loadStatuses]);
 
   const filteredResults = useMemo(() => {
     if (query.length < 2) return [];

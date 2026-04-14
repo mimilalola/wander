@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useMemo } from 'react';
 import {
   View,
   Text,
@@ -43,7 +43,7 @@ export default function HotelDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
   const sqlite = useSQLiteContext();
-  const db = createDb(sqlite);
+  const db = useMemo(() => createDb(sqlite), [sqlite]);
   const [hotel, setHotel] = useState<HotelDetails | null>(null);
 
   const loadHotel = useCallback(async () => {

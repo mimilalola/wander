@@ -1,4 +1,4 @@
-import { eq, and } from 'drizzle-orm';
+import { eq, and, sql, desc } from 'drizzle-orm';
 import { type Database } from '../db/client';
 import * as schema from '../db/schema';
 import type { SaveStatus } from '../types';
@@ -55,8 +55,25 @@ export async function getSaveForHotel(db: Database, userId: number, hotelId: num
  * Fully remove a hotel from a user's list.
  * Cascades: photos → visits → save record.
  * This ensures no orphaned data and full consistency across stats and rankings.
+ *
+ * Invariant maintenance: if the deleted hotel held the top rank (10.0), the
+ * next highest hotel in the same tier (loved: 6.6–10.0) is promoted to 10.0
+ * so the "top item is always 10.0" rule is never violated.
  */
 export async function removeSave(db: Database, userId: number, hotelId: number) {
+  // 0. Check whether the hotel being deleted currently holds rank = 10.0.
+  //    We must do this BEFORE deleting its visits so we can still read the rank.
+  const topCheck = await db
+    .select({ id: schema.visits.id })
+    .from(schema.visits)
+    .where(
+      sql`${schema.visits.userId} = ${userId}
+          AND ${schema.visits.hotelId} = ${hotelId}
+          AND ${schema.visits.rank} = 10.0`
+    )
+    .limit(1);
+  const wasTop = topCheck.length > 0;
+
   // 1. Find all visits for this hotel by this user
   const visits = await db
     .select({ id: schema.visits.id })
@@ -77,4 +94,35 @@ export async function removeSave(db: Database, userId: number, hotelId: number) 
   await db
     .delete(schema.saves)
     .where(and(eq(schema.saves.userId, userId), eq(schema.saves.hotelId, hotelId)));
+
+  // 5. If the deleted hotel was the top-ranked (10.0), promote the next highest
+  //    hotel in the loved tier (rank 6.6–10.0) to 10.0 so the invariant holds.
+  if (wasTop) {
+    const nextTop = await db
+      .select({ id: schema.visits.id })
+      .from(schema.visits)
+      .innerJoin(
+        schema.saves,
+        and(
+          eq(schema.visits.hotelId, schema.saves.hotelId),
+          eq(schema.visits.userId, schema.saves.userId)
+        )
+      )
+      .where(
+        sql`${schema.visits.userId} = ${userId}
+            AND ${schema.saves.status} = 'been'
+            AND ${schema.visits.rank} IS NOT NULL
+            AND ${schema.visits.rank} < 10.0
+            AND ${schema.visits.rank} >= 6.6`
+      )
+      .orderBy(desc(schema.visits.rank))
+      .limit(1);
+
+    if (nextTop.length > 0) {
+      await db
+        .update(schema.visits)
+        .set({ rank: 10.0 })
+        .where(eq(schema.visits.id, nextTop[0].id));
+    }
+  }
 }

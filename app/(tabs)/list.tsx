@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useRef } from 'react';
+import React, { useState, useCallback, useRef, useEffect, useMemo } from 'react';
 import {
   View,
   Text,
@@ -38,7 +38,7 @@ interface SavedHotel {
 export default function ListScreen() {
   const router = useRouter();
   const sqlite = useSQLiteContext();
-  const db = createDb(sqlite);
+  const db = useMemo(() => createDb(sqlite), [sqlite]);
   const [filter, setFilter] = useState('All');
   const [hotels, setHotels] = useState<SavedHotel[]>([]);
   // Ref used by each swipeable's simultaneousHandlers so the FlatList scroll
@@ -48,6 +48,12 @@ export default function ListScreen() {
   const scrollHandlerRef = useRef(null);
   // Track all rendered swipeables by hotel id so we can close others on open
   const swipeableRefs = useRef<Map<number, { close: () => void }>>(new Map());
+
+  // Close any open swipeable when the user switches filter tabs so nothing
+  // remains stuck open as the list contents change.
+  useEffect(() => {
+    swipeableRefs.current.forEach((ref) => ref.close());
+  }, [filter]);
 
   const loadHotels = useCallback(async () => {
     const results = await db
@@ -172,7 +178,7 @@ export default function ListScreen() {
           which tells RNGH to let both gestures recognise at once instead of
           competing — fixing the "swipe absorbed by scroll" bug.
         */}
-        <NativeViewGestureHandler ref={scrollHandlerRef} disallowInterruption>
+        <NativeViewGestureHandler ref={scrollHandlerRef}>
           <FlatList
             data={filtered}
             keyExtractor={(item) => item.id.toString()}

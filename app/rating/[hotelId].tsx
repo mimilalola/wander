@@ -12,6 +12,7 @@ import {
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSQLiteContext } from 'expo-sqlite';
+import { eq, and, sql } from 'drizzle-orm';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import { Colors } from '../../src/constants/colors';
@@ -19,6 +20,7 @@ import { Layout } from '../../src/constants/layout';
 import { RatingSlider } from '../../src/components/RatingSlider';
 import { ComparisonCard } from '../../src/components/ComparisonCard';
 import { createDb } from '../../src/db/client';
+import * as schema from '../../src/db/schema';
 import { getHotelById } from '../../src/dal/hotels';
 import { toggleSave, getSaveForHotel } from '../../src/dal/saves';
 import {
@@ -77,6 +79,21 @@ export default function RatingScreen() {
           return;
         }
 
+        // Remove any incomplete visits left by a previously cancelled session.
+        // These have rank = NULL and would otherwise accumulate as dead records.
+        // Safe to delete: a ranked visit (rank IS NOT NULL) means the hotel is
+        // already 'been', and handleBeen() guards prevent re-entering this flow
+        // for 'been' hotels.
+        await db
+          .delete(schema.visits)
+          .where(
+            and(
+              eq(schema.visits.userId, 1),
+              eq(schema.visits.hotelId, parseInt(hotelId!)),
+              sql`${schema.visits.rank} IS NULL`
+            )
+          );
+
         // Create the visit record (unranked until comparisons complete)
         const visit = await createVisit(db, {
           userId: 1,
@@ -86,14 +103,9 @@ export default function RatingScreen() {
         });
         setNewVisitId(visit.id);
 
-        // Transition save status: want → been (removes from Saved, adds to Slept).
-        // Guard: if the hotel is already 'been', calling toggleSave('been') would
-        // toggle it OFF (cascade-deleting all visits/photos). Only call it when
-        // the transition is actually needed.
-        const existingSave = await getSaveForHotel(db, 1, parseInt(hotelId!));
-        if (!existingSave || existingSave.status !== 'been') {
-          await toggleSave(db, 1, parseInt(hotelId!), 'been');
-        }
+        // NOTE: Save-status transition (want → been) is deferred to handleSave
+        // so that cancelling the flow mid-way does NOT leave the hotel permanently
+        // stuck as 'been' without a rank.
 
         // Load all existing scores for insertion score context
         const allScores = await getAllVisitScoresForUser(db, 1);
@@ -283,6 +295,15 @@ export default function RatingScreen() {
         const newOldTopScore = Math.round(((10.0 + nextScore) / 2) * 10) / 10;
         await updateVisitRank(db, currentTop.id, newOldTopScore);
       }
+    }
+
+    // Transition save status: want → been (removes from Saved, adds to Slept).
+    // Done here — not in step 'rate' — so cancelling mid-flow leaves the hotel
+    // in its original Saved state rather than permanently marking it as Slept
+    // without a rank. Guard prevents toggle-off if already 'been'.
+    const existingSave = await getSaveForHotel(db, 1, parseInt(hotelId!));
+    if (!existingSave || existingSave.status !== 'been') {
+      await toggleSave(db, 1, parseInt(hotelId!), 'been');
     }
 
     // Persist the insertion-based rank and notes for this visit

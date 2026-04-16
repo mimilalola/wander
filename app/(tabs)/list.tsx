@@ -119,19 +119,71 @@ export default function ListScreen() {
             text: 'Remove',
             style: 'destructive',
             onPress: async () => {
-              // Optimistically remove the item from the UI immediately.
-              // This avoids the jitter / stuck-swipeable state that occurred
-              // when we waited for the DB delete + full list reload before
-              // updating the rendered list.
+              // Optimistically remove the item from the UI immediately so the
+              // swipeable doesn't stay open while the DB operation runs.
               setHotels((prev) => prev.filter((h) => h.id !== hotel.id));
               // Cascade-delete save → visits → photos from the database.
               await removeSave(db, 1, hotel.id);
+              // Reload so any rank promotions (e.g. a new #1 after deleting
+              // the previous top-ranked hotel) are reflected in the UI.
+              await loadHotels();
             },
           },
         ]
       );
     },
-    [db]
+    [db, loadHotels]
+  );
+
+  // Memoised per-item renderer.
+  // Keeping this stable (not inline in JSX) prevents React from creating a new
+  // ref-callback function on every parent render, which would cause
+  // ReanimatedSwipeable to receive a null→element ref call and reset its open/
+  // closed state mid-gesture — the root cause of "swipe requires multiple tries".
+  const renderItem = useCallback(
+    ({ item }: { item: SavedHotel }) => (
+      <ReanimatedSwipeable
+        ref={(ref) => {
+          if (ref) swipeableRefs.current.set(item.id, ref);
+          else swipeableRefs.current.delete(item.id);
+        }}
+        simultaneousHandlers={scrollHandlerRef}
+        onSwipeableOpen={() => {
+          swipeableRefs.current.forEach((ref, id) => {
+            if (id !== item.id) ref.close();
+          });
+        }}
+        renderRightActions={() => (
+          <TouchableOpacity
+            style={styles.deleteAction}
+            onPress={() => handleDelete(item)}
+            activeOpacity={0.8}
+          >
+            <Ionicons name="trash-outline" size={22} color={Colors.white} />
+            <Text style={styles.deleteActionText}>Delete</Text>
+          </TouchableOpacity>
+        )}
+        friction={1}
+        rightThreshold={40}
+        overshootRight={false}
+        overshootFriction={8}
+      >
+        <HotelCard
+          name={item.name}
+          city={item.city}
+          country={item.country}
+          priceLevel={item.priceLevel}
+          coverPhoto={item.coverPhoto}
+          saveStatus={item.saveStatus}
+          rating={item.rank}
+          onPress={() => {
+            swipeableRefs.current.forEach((ref) => ref.close());
+            router.push(`/hotel/${item.id}`);
+          }}
+        />
+      </ReanimatedSwipeable>
+    ),
+    [handleDelete, router]
   );
 
   // Filter using the correct DB status values ('want' = Saved, 'been' = Slept)
@@ -140,20 +192,6 @@ export default function ListScreen() {
     if (filter === 'Slept') return h.saveStatus === 'been';
     return true;
   });
-
-  const renderRightActions = useCallback(
-    (hotel: SavedHotel) => (
-      <TouchableOpacity
-        style={styles.deleteAction}
-        onPress={() => handleDelete(hotel)}
-        activeOpacity={0.8}
-      >
-        <Ionicons name="trash-outline" size={22} color={Colors.white} />
-        <Text style={styles.deleteActionText}>Delete</Text>
-      </TouchableOpacity>
-    ),
-    [handleDelete]
-  );
 
   return (
     <SafeAreaView style={styles.safe}>
@@ -183,40 +221,7 @@ export default function ListScreen() {
             data={filtered}
             keyExtractor={(item) => item.id.toString()}
             contentContainerStyle={styles.listContent}
-            renderItem={({ item }) => (
-              <ReanimatedSwipeable
-                ref={(ref) => {
-                  if (ref) swipeableRefs.current.set(item.id, ref);
-                  else swipeableRefs.current.delete(item.id);
-                }}
-                simultaneousHandlers={scrollHandlerRef}
-                onSwipeableOpen={() => {
-                  // Close every other open swipeable
-                  swipeableRefs.current.forEach((ref, id) => {
-                    if (id !== item.id) ref.close();
-                  });
-                }}
-                renderRightActions={() => renderRightActions(item)}
-                friction={1}
-                rightThreshold={40}
-                overshootRight={false}
-                overshootFriction={8}
-              >
-                <HotelCard
-                  name={item.name}
-                  city={item.city}
-                  country={item.country}
-                  priceLevel={item.priceLevel}
-                  coverPhoto={item.coverPhoto}
-                  saveStatus={item.saveStatus}
-                  rating={item.rank}
-                  onPress={() => {
-                    swipeableRefs.current.forEach((ref) => ref.close());
-                    router.push(`/hotel/${item.id}`);
-                  }}
-                />
-              </ReanimatedSwipeable>
-            )}
+            renderItem={renderItem}
             ListEmptyComponent={
               <EmptyState
                 icon="bookmark-outline"

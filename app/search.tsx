@@ -126,20 +126,22 @@ export default function SearchScreen() {
    * Navigate to the hotel detail screen so the user can go through the full
    * rating/ranking flow via the "Been" button there.
    *
+   * Uses replace (not push) so the search screen is removed from the navigation
+   * stack before the user enters the hotel → rating flow. This ensures that
+   * handleSave's router.dismissAll() + router.replace('/(tabs)/') always lands
+   * cleanly on Reception regardless of how the user reached hotel detail.
+   *
    * We intentionally do NOT directly toggle the 'been' status here because:
    *   1. It would bypass the rating/comparison/ranking flow entirely.
    *   2. A hotel marked 'been' without a visit record would have no rank data,
    *      corrupting the ranking list.
    *   3. If the hotel is already slept, calling toggleSave('been') would
    *      cascade-DELETE all its visits and photos.
-   *
-   * The "Been" button on the hotel detail screen has the correct guards and
-   * navigates to the rating flow.
    */
   const handleNavigateToHotel = useCallback(
     async (hotel: (typeof mockHotels)[0]) => {
       const hotelId = await getOrCreateHotelId(hotel);
-      router.push(`/hotel/${hotelId}`);
+      router.replace(`/hotel/${hotelId}`);
     },
     [getOrCreateHotelId, router]
   );

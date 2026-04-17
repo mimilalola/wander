@@ -51,10 +51,12 @@ export function computeInsertionScore(
   const effectiveUpper = loserScores.length > 0 ? Math.min(...loserScores) : null;
   const effectiveLower = winnerScores.length > 0 ? Math.max(...winnerScores) : null;
 
-  // No useful comparison data → place below current bottom of tier
+  // No useful comparison data → insert at midpoint between tier bottom and tier minimum.
+  // This follows the same insertion logic as all other placements: score = midpoint of
+  // the two surrounding values (the current bottom score and the tier floor).
   if (effectiveUpper === null && effectiveLower === null) {
     const minInTier = sorted[sorted.length - 1];
-    const score = Math.round((minInTier - 1.0) * 10) / 10;
+    const score = Math.round(((minInTier + bounds.min) / 2) * 10) / 10;
     return Math.max(bounds.min, score);
   }
 

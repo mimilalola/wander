@@ -269,7 +269,7 @@ export default function RatingScreen() {
   };
 
   const handleSave = async () => {
-    if (!newVisitId || rating === null) return;
+    if (!newVisitId || rating === null || newVisitRank === null) return;
 
     // Final enforcement of the "only ONE 10.0" rule.
     // Covers every path that resolves to 10.0:

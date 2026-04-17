@@ -91,7 +91,7 @@ export default function ListScreen() {
       }
     }
     setHotels(withRanks);
-  }, []);
+  }, [db]);
 
   useFocusEffect(
     useCallback(() => {

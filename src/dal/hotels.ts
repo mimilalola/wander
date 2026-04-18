@@ -56,10 +56,13 @@ export async function getHotelWithDetails(db: Database, hotelId: number, userId:
     .where(sql`${schema.saves.userId} = ${userId} AND ${schema.saves.hotelId} = ${hotelId}`)
     .limit(1);
 
+  // Only include completed (ranked) visits. NULL-rank visits are orphaned records
+  // from abandoned rating sessions — they have no insertion score and must not
+  // appear in the hotel detail or affect any downstream logic.
   const visitsList = await db
     .select()
     .from(schema.visits)
-    .where(sql`${schema.visits.userId} = ${userId} AND ${schema.visits.hotelId} = ${hotelId}`)
+    .where(sql`${schema.visits.userId} = ${userId} AND ${schema.visits.hotelId} = ${hotelId} AND ${schema.visits.rank} IS NOT NULL`)
     .orderBy(sql`${schema.visits.createdAt} DESC`);
 
   const tagRows = await db

@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useMemo } from 'react';
 import {
   View,
   Text,
@@ -28,7 +28,7 @@ interface UserData {
 export default function ProfileScreen() {
   const router = useRouter();
   const sqlite = useSQLiteContext();
-  const db = createDb(sqlite);
+  const db = useMemo(() => createDb(sqlite), [sqlite]);
   const [user, setUser] = useState<UserData | null>(null);
   const [stats, setStats] = useState<ProfileStats | null>(null);
 
@@ -44,7 +44,7 @@ export default function ProfileScreen() {
     }
     const profileStats = await getProfileStats(db, 1);
     setStats(profileStats);
-  }, []);
+  }, [db]);
 
   useFocusEffect(
     useCallback(() => {

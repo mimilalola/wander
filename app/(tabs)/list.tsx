@@ -48,6 +48,24 @@ export default function ListScreen() {
   const scrollHandlerRef = useRef(null);
   // Track all rendered swipeables by hotel id so we can close others on open
   const swipeableRefs = useRef<Map<number, { close: () => void }>>(new Map());
+  // Stable ref callbacks keyed by hotel id — reusing the same function object
+  // prevents React from treating every hotel-data update as a ref change
+  // (which would trigger old_ref(null) → new_ref(element) and reset gesture state).
+  const refCallbacks = useRef<Map<number, (ref: any) => void>>(new Map());
+
+  const getRefCallback = useCallback((id: number) => {
+    if (!refCallbacks.current.has(id)) {
+      refCallbacks.current.set(id, (ref: any) => {
+        if (ref) {
+          swipeableRefs.current.set(id, ref);
+        } else {
+          swipeableRefs.current.delete(id);
+          refCallbacks.current.delete(id);
+        }
+      });
+    }
+    return refCallbacks.current.get(id)!;
+  }, []);
 
   // Close any open swipeable when the user switches filter tabs so nothing
   // remains stuck open as the list contents change.
@@ -143,10 +161,7 @@ export default function ListScreen() {
   const renderItem = useCallback(
     ({ item }: { item: SavedHotel }) => (
       <ReanimatedSwipeable
-        ref={(ref) => {
-          if (ref) swipeableRefs.current.set(item.id, ref);
-          else swipeableRefs.current.delete(item.id);
-        }}
+        ref={getRefCallback(item.id)}
         simultaneousHandlers={scrollHandlerRef}
         onSwipeableOpen={() => {
           swipeableRefs.current.forEach((ref, id) => {
@@ -183,7 +198,7 @@ export default function ListScreen() {
         />
       </ReanimatedSwipeable>
     ),
-    [handleDelete, router]
+    [handleDelete, router, getRefCallback]
   );
 
   // Filter using the correct DB status values ('want' = Saved, 'been' = Slept)
@@ -222,6 +237,7 @@ export default function ListScreen() {
             keyExtractor={(item) => item.id.toString()}
             contentContainerStyle={styles.listContent}
             renderItem={renderItem}
+            removeClippedSubviews={false}
             ListEmptyComponent={
               <EmptyState
                 icon="bookmark-outline"

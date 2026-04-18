@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useMemo } from 'react';
 import { View, Text, StyleSheet, FlatList, SafeAreaView } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSQLiteContext } from 'expo-sqlite';
@@ -28,7 +28,7 @@ interface HotelRow {
 export default function HomeScreen() {
   const router = useRouter();
   const sqlite = useSQLiteContext();
-  const db = createDb(sqlite);
+  const db = useMemo(() => createDb(sqlite), [sqlite]);
   const [hotels, setHotels] = useState<HotelRow[]>([]);
   const [viewMode, setViewMode] = useState('Recent');
 
@@ -69,7 +69,7 @@ export default function HomeScreen() {
       withRanks.push({ ...h, saveStatus: h.saveStatus as SaveStatus, rank });
     }
     setHotels(withRanks);
-  }, []);
+  }, [db]);
 
   useFocusEffect(
     useCallback(() => {

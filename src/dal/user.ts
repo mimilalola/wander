@@ -34,7 +34,11 @@ export async function getProfileStats(db: Database, userId: number): Promise<Pro
     .select({ count: sql<number>`COUNT(DISTINCT ${schema.visits.hotelId})` })
     .from(schema.visits)
     .innerJoin(schema.saves, beenJoin)
-    .where(and(eq(schema.visits.userId, userId), eq(schema.saves.status, 'been')));
+    .where(
+      sql`${schema.visits.userId} = ${userId}
+          AND ${schema.saves.status} = 'been'
+          AND ${schema.visits.rank} IS NOT NULL`
+    );
 
   const avgResult = await db
     .select({ avg: sql<number | null>`AVG(${schema.visits.rating})` })
@@ -43,7 +47,8 @@ export async function getProfileStats(db: Database, userId: number): Promise<Pro
     .where(
       sql`${schema.visits.userId} = ${userId}
           AND ${schema.saves.status} = 'been'
-          AND ${schema.visits.rating} IS NOT NULL`
+          AND ${schema.visits.rating} IS NOT NULL
+          AND ${schema.visits.rank} IS NOT NULL`
     );
 
   const topCities = await db
@@ -54,7 +59,11 @@ export async function getProfileStats(db: Database, userId: number): Promise<Pro
     .from(schema.visits)
     .innerJoin(schema.hotels, eq(schema.visits.hotelId, schema.hotels.id))
     .innerJoin(schema.saves, beenJoin)
-    .where(and(eq(schema.visits.userId, userId), eq(schema.saves.status, 'been')))
+    .where(
+      sql`${schema.visits.userId} = ${userId}
+          AND ${schema.saves.status} = 'been'
+          AND ${schema.visits.rank} IS NOT NULL`
+    )
     .groupBy(schema.hotels.city)
     .orderBy(sql`COUNT(*) DESC`)
     .limit(5);
@@ -64,7 +73,11 @@ export async function getProfileStats(db: Database, userId: number): Promise<Pro
     .from(schema.visits)
     .innerJoin(schema.hotels, eq(schema.visits.hotelId, schema.hotels.id))
     .innerJoin(schema.saves, beenJoin)
-    .where(and(eq(schema.visits.userId, userId), eq(schema.saves.status, 'been')));
+    .where(
+      sql`${schema.visits.userId} = ${userId}
+          AND ${schema.saves.status} = 'been'
+          AND ${schema.visits.rank} IS NOT NULL`
+    );
 
   const topTags = await db
     .select({
@@ -75,7 +88,11 @@ export async function getProfileStats(db: Database, userId: number): Promise<Pro
     .innerJoin(schema.hotelTags, eq(schema.visits.hotelId, schema.hotelTags.hotelId))
     .innerJoin(schema.tags, eq(schema.hotelTags.tagId, schema.tags.id))
     .innerJoin(schema.saves, beenJoin)
-    .where(and(eq(schema.visits.userId, userId), eq(schema.saves.status, 'been')))
+    .where(
+      sql`${schema.visits.userId} = ${userId}
+          AND ${schema.saves.status} = 'been'
+          AND ${schema.visits.rank} IS NOT NULL`
+    )
     .groupBy(schema.tags.name)
     .orderBy(sql`COUNT(*) DESC`)
     .limit(5);

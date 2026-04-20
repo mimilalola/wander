@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useMemo } from 'react';
+import React, { useState, useCallback, useMemo, useRef } from 'react';
 import {
   View,
   Text,
@@ -45,6 +45,8 @@ export default function HotelDetailScreen() {
   const sqlite = useSQLiteContext();
   const db = useMemo(() => createDb(sqlite), [sqlite]);
   const [hotel, setHotel] = useState<HotelDetails | null>(null);
+  // Prevent double-tap from pushing two rating screens before the transition completes.
+  const isNavigatingRef = useRef(false);
 
   const loadHotel = useCallback(async () => {
     if (!id) return;
@@ -54,6 +56,7 @@ export default function HotelDetailScreen() {
 
   useFocusEffect(
     useCallback(() => {
+      isNavigatingRef.current = false;
       loadHotel();
     }, [loadHotel])
   );
@@ -75,6 +78,9 @@ export default function HotelDetailScreen() {
     // toggle OFF the save (cascade-deleting all visit data), and would create
     // a second unintended visit record for the same hotel.
     if (hotel.save?.status === 'been') return;
+    // Guard against double-tap pushing two rating screens before transition.
+    if (isNavigatingRef.current) return;
+    isNavigatingRef.current = true;
     router.push(`/rating/${hotel.id}`);
   };
 

@@ -119,6 +119,12 @@ export default function ListScreen() {
 
   const handleDelete = useCallback(
     async (hotel: SavedHotel) => {
+      // Close the row immediately before showing the alert.
+      // If we leave it open and the user dismisses the alert via Android's
+      // hardware-back button (which fires no button callback), the row stays
+      // frozen open and requires an extra swipe to reset.
+      swipeableRefs.current.get(hotel.id)?.close();
+
       const isSlept = hotel.saveStatus === 'been';
       Alert.alert(
         'Remove Hotel',
@@ -126,24 +132,13 @@ export default function ListScreen() {
           ? `Remove ${hotel.name}? This will also delete your visit history and photos.`
           : `Remove ${hotel.name} from your wishlist?`,
         [
-          {
-            text: 'Cancel',
-            style: 'cancel',
-            onPress: () => {
-              swipeableRefs.current.get(hotel.id)?.close();
-            },
-          },
+          { text: 'Cancel', style: 'cancel' },
           {
             text: 'Remove',
             style: 'destructive',
             onPress: async () => {
-              // Optimistically remove the item from the UI immediately so the
-              // swipeable doesn't stay open while the DB operation runs.
               setHotels((prev) => prev.filter((h) => h.id !== hotel.id));
-              // Cascade-delete save → visits → photos from the database.
               await removeSave(db, 1, hotel.id);
-              // Reload so any rank promotions (e.g. a new #1 after deleting
-              // the previous top-ranked hotel) are reflected in the UI.
               await loadHotels();
             },
           },

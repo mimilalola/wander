@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import {
   View,
   Text,
@@ -60,7 +60,8 @@ export default function RatingScreen() {
   const [newVisitId, setNewVisitId] = useState<number | null>(null);
   // Insertion-based score computed after all comparisons
   const [newVisitRank, setNewVisitRank] = useState<number | null>(null);
-  // Tracks wins/losses for insertion scoring (not updated in state mid-comparison)
+  // Tracks wins/losses for insertion scoring: index → true (won) | false (lost)
+  const compResultsRef = useRef<Map<number, boolean>>(new Map());
   const [allExistingScores, setAllExistingScores] = useState<number[]>([]);
 
   useEffect(() => {
@@ -93,6 +94,9 @@ export default function RatingScreen() {
               sql`${schema.visits.rank} IS NULL`
             )
           );
+
+        // Reset comparison results for this new flow.
+        compResultsRef.current.clear();
 
         // Create the visit record (unranked until comparisons complete)
         const visit = await createVisit(db, {
@@ -151,8 +155,9 @@ export default function RatingScreen() {
           for (let i = 0; i < compIndex; i++) {
             const comp = comparisons[i];
             const score = comp.visit.rank ?? 0;
-            if ((comp as any).__won === true) partialWins.push(score);
-            else if ((comp as any).__won === false) partialLosses.push(score);
+            const won = compResultsRef.current.get(i);
+            if (won === true) partialWins.push(score);
+            else if (won === false) partialLosses.push(score);
           }
           const score = computeInsertionScore(partialWins, partialLosses, tier, tierScores);
           setNewVisitRank(score);
@@ -187,55 +192,31 @@ export default function RatingScreen() {
     const isLastComparison = compIndex >= comparisons.length - 1;
 
     if (!isLastComparison) {
-      // Not the last comparison — record result by updating local state and advance
-      // We recalculate from scratch at the final step, so we track incrementally here
-      if (isNewHotelWinner) {
-        setComparisons((prev) => {
-          // Tag the current comparison as "won" by mutating a copy
-          const copy = [...prev];
-          (copy[compIndex] as any).__won = true;
-          return copy;
-        });
-      } else {
-        setComparisons((prev) => {
-          const copy = [...prev];
-          (copy[compIndex] as any).__won = false;
-          return copy;
-        });
-      }
+      // Record result in the ref (no state mutation needed) and advance.
+      compResultsRef.current.set(compIndex, isNewHotelWinner);
       setCompIndex(compIndex + 1);
       return;
     }
 
     // ---- Last comparison: compute final insertion score ----
+    // Record the final result then collect all wins/losses from the ref.
+    compResultsRef.current.set(compIndex, isNewHotelWinner);
+
     const tier = getTier(rating);
     const bounds = TIER_BOUNDS[tier];
     const tierScores = allExistingScores.filter(
       (s) => s >= bounds.min && s <= bounds.max
     );
 
-    // Collect all win/loss data including this final comparison
     const winnerScores: number[] = [];
     const loserScores: number[] = [];
 
     for (let i = 0; i < comparisons.length; i++) {
       const comp = comparisons[i];
       const score = comp.visit.rank ?? 0;
-      if (i < comparisons.length - 1) {
-        // Previous comparisons tagged via __won
-        if ((comp as any).__won === true) {
-          winnerScores.push(score);
-        } else if ((comp as any).__won === false) {
-          loserScores.push(score);
-        }
-      } else {
-        // Current (final) comparison
-        if (isNewHotelWinner) {
-          winnerScores.push(compScore);
-        } else {
-          loserScores.push(compScore);
-        }
-      }
+      const won = compResultsRef.current.get(i);
+      if (won === true) winnerScores.push(score);
+      else if (won === false) loserScores.push(score);
     }
 
     const finalScore = computeInsertionScore(winnerScores, loserScores, tier, tierScores);
@@ -247,8 +228,11 @@ export default function RatingScreen() {
       const currentTop = await getTopRankedVisit(db, 1);
       if (currentTop && currentTop.id !== newVisitId) {
         const scoresBelow10 = tierScores.filter((s) => s < 10.0).sort((a, b) => b - a);
-        const nextScore = scoresBelow10.length > 0 ? scoresBelow10[0] : 9.0;
-        const newOldTopScore = Math.round(((10.0 + nextScore) / 2) * 10) / 10;
+        // If no other loved hotels exist, use the tier floor (6.6) as the lower
+        // bound so the displaced top lands at midpoint(10.0, 6.6) = 8.3,
+        // which is the correct insertion placement per the algorithm.
+        const lowerBound = scoresBelow10.length > 0 ? scoresBelow10[0] : TIER_BOUNDS['loved'].min;
+        const newOldTopScore = Math.round(((10.0 + lowerBound) / 2) * 10) / 10;
         await updateVisitRank(db, currentTop.id, newOldTopScore);
       }
     }
@@ -289,10 +273,11 @@ export default function RatingScreen() {
         const bounds = TIER_BOUNDS[tier];
         const tierScores = allScores.filter((s) => s >= bounds.min && s <= bounds.max);
         // Place the displaced top between 10.0 and the next score below it.
-        // Fallback to 9.0 when it was the only loved hotel so it lands at 9.5.
+        // Fallback to the tier floor (6.6) when it was the only loved hotel,
+        // giving midpoint(10.0, 6.6) = 8.3 — correct per the insertion algorithm.
         const scoresBelow10 = tierScores.filter((s) => s < 10.0).sort((a, b) => b - a);
-        const nextScore = scoresBelow10.length > 0 ? scoresBelow10[0] : 9.0;
-        const newOldTopScore = Math.round(((10.0 + nextScore) / 2) * 10) / 10;
+        const lowerBound = scoresBelow10.length > 0 ? scoresBelow10[0] : TIER_BOUNDS['loved'].min;
+        const newOldTopScore = Math.round(((10.0 + lowerBound) / 2) * 10) / 10;
         await updateVisitRank(db, currentTop.id, newOldTopScore);
       }
     }
@@ -340,8 +325,9 @@ export default function RatingScreen() {
           for (let i = 0; i < compIndex; i++) {
             const comp = comparisons[i];
             const score = comp.visit.rank ?? 0;
-            if ((comp as any).__won === true) partialWins.push(score);
-            else if ((comp as any).__won === false) partialLosses.push(score);
+            const won = compResultsRef.current.get(i);
+            if (won === true) partialWins.push(score);
+            else if (won === false) partialLosses.push(score);
           }
           const score = computeInsertionScore(partialWins, partialLosses, tier, tierScores);
           setNewVisitRank(score);

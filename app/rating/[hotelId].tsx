@@ -63,6 +63,8 @@ export default function RatingScreen() {
   // Tracks wins/losses for insertion scoring: index → true (won) | false (lost)
   const compResultsRef = useRef<Map<number, boolean>>(new Map());
   const [allExistingScores, setAllExistingScores] = useState<number[]>([]);
+  // Guard against double-tap of "Save Visit" which could cause duplicate photo inserts
+  const isSavingRef = useRef(false);
 
   useEffect(() => {
     if (!hotelId) return;
@@ -254,6 +256,8 @@ export default function RatingScreen() {
 
   const handleSave = async () => {
     if (!newVisitId || rating === null || newVisitRank === null) return;
+    if (isSavingRef.current) return;
+    isSavingRef.current = true;
 
     // Final enforcement of the "only ONE 10.0" rule.
     // Covers every path that resolves to 10.0:

@@ -93,7 +93,7 @@ export default function HotelDetailScreen() {
         style: 'destructive',
         onPress: async () => {
           await removeSave(db, 1, hotel.id);
-          loadHotel();
+          router.back();
         },
       },
     ]);

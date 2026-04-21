@@ -176,7 +176,7 @@ export default function SearchScreen() {
               priceLevel={item.priceLevel}
               isSaved={savedNames.has(item.name)}
               isSlept={sleptNames.has(item.name)}
-              onToggleSaved={() => handleToggleSaved(item)}
+              onToggleSaved={sleptNames.has(item.name) ? undefined : () => handleToggleSaved(item)}
               onToggleSlept={() => handleNavigateToHotel(item)}
               onPress={() => handleSelectHotel(item)}
             />

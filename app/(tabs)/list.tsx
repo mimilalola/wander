@@ -196,12 +196,17 @@ export default function ListScreen() {
     [handleDelete, router, getRefCallback]
   );
 
-  // Filter using the correct DB status values ('want' = Saved, 'been' = Slept)
-  const filtered = hotels.filter((h) => {
-    if (filter === 'Saved') return h.saveStatus === 'want';
-    if (filter === 'Slept') return h.saveStatus === 'been';
-    return true;
-  });
+  // Memoised filter: same array reference between renders so FlatList doesn't
+  // invalidate gesture recogniser state on every unrelated re-render.
+  const filtered = useMemo(
+    () =>
+      hotels.filter((h) => {
+        if (filter === 'Saved') return h.saveStatus === 'want';
+        if (filter === 'Slept') return h.saveStatus === 'been';
+        return true;
+      }),
+    [hotels, filter]
+  );
 
   return (
     <SafeAreaView style={styles.safe}>

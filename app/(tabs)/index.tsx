@@ -77,6 +77,20 @@ export default function HomeScreen() {
     }, [loadHotels])
   );
 
+  // Stable reference so FlatList doesn't invalidate item layout / state on
+  // every unrelated re-render.  Only recomputes when hotels or viewMode changes.
+  const displayedHotels = useMemo(() => {
+    const base = hotels.filter((h) => {
+      if (viewMode === 'Want') return h.saveStatus === 'want';
+      if (viewMode === 'Top Rated') return h.saveStatus === 'been' && h.rank !== null;
+      return true;
+    });
+    if (viewMode === 'Top Rated') {
+      return [...base].sort((a, b) => (b.rank ?? 0) - (a.rank ?? 0));
+    }
+    return base;
+  }, [hotels, viewMode]);
+
   return (
     <SafeAreaView style={styles.safe}>
       <View style={styles.container}>
@@ -98,16 +112,7 @@ export default function HomeScreen() {
         </View>
 
         <FlatList
-          data={hotels.filter((h) => {
-            if (viewMode === 'Want') return h.saveStatus === 'want';
-            // Top Rated: only slept hotels that have a computed insertion rank
-            if (viewMode === 'Top Rated') return h.saveStatus === 'been' && h.rank !== null;
-            return true;
-          }).sort((a, b) => {
-            // Sort by insertion rank (highest first); ties preserve list order
-            if (viewMode === 'Top Rated') return (b.rank ?? 0) - (a.rank ?? 0);
-            return 0;
-          })}
+          data={displayedHotels}
           keyExtractor={(item) => item.id.toString()}
           contentContainerStyle={styles.listContent}
           renderItem={({ item }) => (

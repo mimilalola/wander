@@ -296,10 +296,10 @@ export default function RatingScreen() {
     }
 
     // Persist the insertion-based rank and notes for this visit
-    await sqlite.runAsync(
-      `UPDATE visits SET notes = ?, rank = ? WHERE id = ?`,
-      [notes || null, newVisitRank, newVisitId]
-    );
+    await db
+      .update(schema.visits)
+      .set({ notes: notes || null, rank: newVisitRank })
+      .where(eq(schema.visits.id, newVisitId));
 
     if (photoUris.length > 0) {
       await addPhotos(db, newVisitId, photoUris);

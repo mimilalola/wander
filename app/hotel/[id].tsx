@@ -52,7 +52,7 @@ export default function HotelDetailScreen() {
     if (!id) return;
     const data = await getHotelWithDetails(db, parseInt(id), 1);
     setHotel(data as HotelDetails);
-  }, [id]);
+  }, [id, db]);
 
   useFocusEffect(
     useCallback(() => {

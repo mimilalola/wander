@@ -196,17 +196,21 @@ export default function ListScreen() {
     [handleDelete, router, getRefCallback]
   );
 
-  // Memoised filter: same array reference between renders so FlatList doesn't
-  // invalidate gesture recogniser state on every unrelated re-render.
-  const filtered = useMemo(
-    () =>
-      hotels.filter((h) => {
-        if (filter === 'Saved') return h.saveStatus === 'want';
-        if (filter === 'Slept') return h.saveStatus === 'been';
-        return true;
-      }),
-    [hotels, filter]
-  );
+  // Memoised filter + sort: same array reference between renders so FlatList
+  // doesn't invalidate gesture recogniser state on every unrelated re-render.
+  // Slept hotels are sorted by rank descending (10.0 first) so the ranking
+  // is visible. Saved and All tabs keep chronological (newest first) order.
+  const filtered = useMemo(() => {
+    const list = hotels.filter((h) => {
+      if (filter === 'Saved') return h.saveStatus === 'want';
+      if (filter === 'Slept') return h.saveStatus === 'been';
+      return true;
+    });
+    if (filter === 'Slept') {
+      return [...list].sort((a, b) => (b.rank ?? -1) - (a.rank ?? -1));
+    }
+    return list;
+  }, [hotels, filter]);
 
   return (
     <SafeAreaView style={styles.safe}>

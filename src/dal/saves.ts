@@ -13,8 +13,8 @@ export async function toggleSave(db: Database, userId: number, hotelId: number, 
   if (existing.length > 0) {
     if (existing[0].status === status) {
       // Toggle off: removing the record entirely.
-      // For 'been' (slept) hotels, cascade-delete visit data so no orphaned
-      // records affect stats or rankings.
+      // For 'been' (slept) hotels, cascade-delete ALL visit data (ranked + photos)
+      // so no orphaned records affect stats or rankings.
       if (status === 'been') {
         const visits = await db
           .select({ id: schema.visits.id })
@@ -26,6 +26,20 @@ export async function toggleSave(db: Database, userId: number, hotelId: number, 
         await db
           .delete(schema.visits)
           .where(and(eq(schema.visits.userId, userId), eq(schema.visits.hotelId, hotelId)));
+      }
+      // For 'want' (saved) hotels, clean up any orphaned unranked visits that
+      // were created during a cancelled rating session. These have rank = NULL
+      // and are invisible to stats/rankings but must not accumulate in the DB.
+      if (status === 'want') {
+        await db
+          .delete(schema.visits)
+          .where(
+            and(
+              eq(schema.visits.userId, userId),
+              eq(schema.visits.hotelId, hotelId),
+              sql`${schema.visits.rank} IS NULL`
+            )
+          );
       }
       await db.delete(schema.saves).where(eq(schema.saves.id, existing[0].id));
       return null;

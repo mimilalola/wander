@@ -8,7 +8,6 @@ import {
   TouchableOpacity,
   Alert,
 } from 'react-native';
-import { NativeViewGestureHandler } from 'react-native-gesture-handler';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { useSQLiteContext } from 'expo-sqlite';
 import { eq, sql, desc } from 'drizzle-orm';
@@ -41,11 +40,6 @@ export default function ListScreen() {
   const db = useMemo(() => createDb(sqlite), [sqlite]);
   const [filter, setFilter] = useState('All');
   const [hotels, setHotels] = useState<SavedHotel[]>([]);
-  // Ref used by each swipeable's simultaneousHandlers so the FlatList scroll
-  // gesture and the swipe gesture are recognised at the same time — prevents
-  // the "multiple swipes needed" issue where the list scroll gesture consumed
-  // the first swipe attempt.
-  const scrollHandlerRef = useRef(null);
   // Track all rendered swipeables by hotel id so we can close others on open
   const swipeableRefs = useRef<Map<number, { close: () => void }>>(new Map());
   // Stable ref callbacks keyed by hotel id — reusing the same function object
@@ -148,16 +142,21 @@ export default function ListScreen() {
     [db, loadHotels]
   );
 
-  // Memoised per-item renderer.
-  // Keeping this stable (not inline in JSX) prevents React from creating a new
-  // ref-callback function on every parent render, which would cause
-  // ReanimatedSwipeable to receive a null→element ref call and reset its open/
-  // closed state mid-gesture — the root cause of "swipe requires multiple tries".
+  // Memoised per-item renderer keeps the renderItem reference stable across
+  // re-renders so ReanimatedSwipeable never receives a null→element ref call
+  // that would reset gesture state mid-swipe.
   const renderItem = useCallback(
     ({ item }: { item: SavedHotel }) => (
       <ReanimatedSwipeable
         ref={getRefCallback(item.id)}
-        simultaneousHandlers={scrollHandlerRef}
+        // activeOffsetX: activate the swipe gesture after 5 px of horizontal
+        // movement. failOffsetY: abort the swipe if 10 px of vertical movement
+        // is detected first, handing control back to the FlatList scroll.
+        // Together these replace the NativeViewGestureHandler + simultaneousHandlers
+        // approach (which caused gestures to fire simultaneously and jitter in
+        // RNGH v2) with RNGH v2's native horizontal/vertical disambiguation.
+        activeOffsetX={[-5, 5]}
+        failOffsetY={[-10, 10]}
         onSwipeableOpen={() => {
           swipeableRefs.current.forEach((ref, id) => {
             if (id !== item.id) ref.close();
@@ -228,36 +227,27 @@ export default function ListScreen() {
           />
         </View>
 
-        {/*
-          NativeViewGestureHandler wraps the FlatList so its scroll gesture
-          and the swipeable's pan gesture are handled simultaneously.
-          The ref is forwarded to each ReanimatedSwipeable via simultaneousHandlers
-          which tells RNGH to let both gestures recognise at once instead of
-          competing — fixing the "swipe absorbed by scroll" bug.
-        */}
-        <NativeViewGestureHandler ref={scrollHandlerRef}>
-          <FlatList
-            data={filtered}
-            keyExtractor={(item) => item.id.toString()}
-            contentContainerStyle={styles.listContent}
-            renderItem={renderItem}
-            removeClippedSubviews={false}
-            ListEmptyComponent={
-              <EmptyState
-                icon="bookmark-outline"
-                message={
-                  filter === 'Saved'
-                    ? 'No hotels on your wishlist yet'
-                    : filter === 'Slept'
-                    ? "You haven't marked any hotels as visited"
-                    : 'Start saving hotels to build your list'
-                }
-                actionLabel="Search Hotels"
-                onAction={() => router.push('/search')}
-              />
-            }
-          />
-        </NativeViewGestureHandler>
+        <FlatList
+          data={filtered}
+          keyExtractor={(item) => item.id.toString()}
+          contentContainerStyle={styles.listContent}
+          renderItem={renderItem}
+          removeClippedSubviews={false}
+          ListEmptyComponent={
+            <EmptyState
+              icon="bookmark-outline"
+              message={
+                filter === 'Saved'
+                  ? 'No hotels on your wishlist yet'
+                  : filter === 'Slept'
+                  ? "You haven't marked any hotels as visited"
+                  : 'Start saving hotels to build your list'
+              }
+              actionLabel="Search Hotels"
+              onAction={() => router.push('/search')}
+            />
+          }
+        />
       </View>
     </SafeAreaView>
   );

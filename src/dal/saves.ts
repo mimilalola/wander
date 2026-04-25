@@ -67,8 +67,8 @@ export async function getSaveForHotel(db: Database, userId: number, hotelId: num
 
 /**
  * Fully remove a hotel from a user's list.
- * Cascades: photos → visits → save record.
- * This ensures no orphaned data and full consistency across stats and rankings.
+ * Cascades: photos → visits → save record — all inside one transaction so a
+ * mid-operation failure cannot leave orphaned data in the database.
  *
  * Invariant maintenance: if the deleted hotel held the top rank (10.0), the
  * next highest hotel in the same tier (loved: 6.6–10.0) is promoted to 10.0
@@ -76,7 +76,7 @@ export async function getSaveForHotel(db: Database, userId: number, hotelId: num
  */
 export async function removeSave(db: Database, userId: number, hotelId: number) {
   // 0. Check whether the hotel being deleted currently holds rank = 10.0.
-  //    We must do this BEFORE deleting its visits so we can still read the rank.
+  //    Done outside the transaction so we can use the result to branch inside.
   const topCheck = await db
     .select({ id: schema.visits.id })
     .from(schema.visits)
@@ -88,55 +88,59 @@ export async function removeSave(db: Database, userId: number, hotelId: number) 
     .limit(1);
   const wasTop = topCheck.length > 0;
 
-  // 1. Find all visits for this hotel by this user
-  const visits = await db
-    .select({ id: schema.visits.id })
-    .from(schema.visits)
-    .where(and(eq(schema.visits.userId, userId), eq(schema.visits.hotelId, hotelId)));
-
-  // 2. Delete photos for each visit
-  for (const visit of visits) {
-    await db.delete(schema.photos).where(eq(schema.photos.visitId, visit.id));
-  }
-
-  // 3. Delete all visits for this hotel
-  await db
-    .delete(schema.visits)
-    .where(and(eq(schema.visits.userId, userId), eq(schema.visits.hotelId, hotelId)));
-
-  // 4. Delete the save record
-  await db
-    .delete(schema.saves)
-    .where(and(eq(schema.saves.userId, userId), eq(schema.saves.hotelId, hotelId)));
-
-  // 5. If the deleted hotel was the top-ranked (10.0), promote the next highest
-  //    hotel in the loved tier (rank 6.6–10.0) to 10.0 so the invariant holds.
-  if (wasTop) {
-    const nextTop = await db
+  await db.transaction(async (tx) => {
+    // 1. Find all visits for this hotel by this user
+    const visits = await tx
       .select({ id: schema.visits.id })
       .from(schema.visits)
-      .innerJoin(
-        schema.saves,
-        and(
-          eq(schema.visits.hotelId, schema.saves.hotelId),
-          eq(schema.visits.userId, schema.saves.userId)
-        )
-      )
-      .where(
-        sql`${schema.visits.userId} = ${userId}
-            AND ${schema.saves.status} = 'been'
-            AND ${schema.visits.rank} IS NOT NULL
-            AND ${schema.visits.rank} < 10.0
-            AND ${schema.visits.rank} >= 6.6`
-      )
-      .orderBy(desc(schema.visits.rank))
-      .limit(1);
+      .where(and(eq(schema.visits.userId, userId), eq(schema.visits.hotelId, hotelId)));
 
-    if (nextTop.length > 0) {
-      await db
-        .update(schema.visits)
-        .set({ rank: 10.0 })
-        .where(eq(schema.visits.id, nextTop[0].id));
+    // 2. Delete photos for each visit
+    for (const visit of visits) {
+      await tx.delete(schema.photos).where(eq(schema.photos.visitId, visit.id));
     }
-  }
+
+    // 3. Delete all visits for this hotel
+    await tx
+      .delete(schema.visits)
+      .where(and(eq(schema.visits.userId, userId), eq(schema.visits.hotelId, hotelId)));
+
+    // 4. Delete the save record
+    await tx
+      .delete(schema.saves)
+      .where(and(eq(schema.saves.userId, userId), eq(schema.saves.hotelId, hotelId)));
+
+    // 5. If the deleted hotel was the top-ranked (10.0), promote the next highest
+    //    hotel in the loved tier (rank 6.6–10.0) to 10.0 so the invariant holds.
+    //    The reads inside the transaction see the already-deleted visits, so the
+    //    deleted hotel is correctly excluded from the nextTop search.
+    if (wasTop) {
+      const nextTop = await tx
+        .select({ id: schema.visits.id })
+        .from(schema.visits)
+        .innerJoin(
+          schema.saves,
+          and(
+            eq(schema.visits.hotelId, schema.saves.hotelId),
+            eq(schema.visits.userId, schema.saves.userId)
+          )
+        )
+        .where(
+          sql`${schema.visits.userId} = ${userId}
+              AND ${schema.saves.status} = 'been'
+              AND ${schema.visits.rank} IS NOT NULL
+              AND ${schema.visits.rank} < 10.0
+              AND ${schema.visits.rank} >= 6.6`
+        )
+        .orderBy(desc(schema.visits.rank))
+        .limit(1);
+
+      if (nextTop.length > 0) {
+        await tx
+          .update(schema.visits)
+          .set({ rank: 10.0 })
+          .where(eq(schema.visits.id, nextTop[0].id));
+      }
+    }
+  });
 }

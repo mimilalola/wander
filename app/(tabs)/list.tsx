@@ -113,12 +113,6 @@ export default function ListScreen() {
 
   const handleDelete = useCallback(
     async (hotel: SavedHotel) => {
-      // Close the row immediately before showing the alert.
-      // If we leave it open and the user dismisses the alert via Android's
-      // hardware-back button (which fires no button callback), the row stays
-      // frozen open and requires an extra swipe to reset.
-      swipeableRefs.current.get(hotel.id)?.close();
-
       const isSlept = hotel.saveStatus === 'been';
       Alert.alert(
         'Remove Hotel',
@@ -126,17 +120,25 @@ export default function ListScreen() {
           ? `Remove ${hotel.name}? This will also delete your visit history and photos.`
           : `Remove ${hotel.name} from your wishlist?`,
         [
-          { text: 'Cancel', style: 'cancel' },
+          {
+            text: 'Cancel',
+            style: 'cancel',
+            onPress: () => swipeableRefs.current.get(hotel.id)?.close(),
+          },
           {
             text: 'Remove',
             style: 'destructive',
             onPress: async () => {
+              swipeableRefs.current.get(hotel.id)?.close();
               setHotels((prev) => prev.filter((h) => h.id !== hotel.id));
               await removeSave(db, 1, hotel.id);
               await loadHotels();
             },
           },
-        ]
+        ],
+        // Prevent Android hardware-back from dismissing without a callback,
+        // which would otherwise leave the row frozen open with no way to reset.
+        { cancelable: false }
       );
     },
     [db, loadHotels]

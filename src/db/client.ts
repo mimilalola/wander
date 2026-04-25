@@ -90,6 +90,18 @@ export async function initializeDatabase(db: SQLiteDatabase) {
     -- These are not valid insertion scores and must not affect rankings or stats.
     UPDATE visits SET rank = NULL WHERE rank > 10.0;
 
+    -- Remove orphaned photos whose visit was deleted without cascading.
+    DELETE FROM photos WHERE visit_id NOT IN (SELECT id FROM visits);
+
+    -- Remove orphaned visits that have no corresponding save record.
+    -- This cleans up stale data from any previous delete bugs and ensures
+    -- stats/rankings are never contaminated by invisible records.
+    DELETE FROM visits WHERE NOT EXISTS (
+      SELECT 1 FROM saves
+      WHERE saves.user_id = visits.user_id
+        AND saves.hotel_id = visits.hotel_id
+    );
+
     INSERT OR IGNORE INTO tags (name) VALUES
       ('beach'), ('countryside'), ('city'), ('boutique'),
       ('spa'), ('romantic'), ('ski'), ('design'),

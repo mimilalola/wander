@@ -108,6 +108,11 @@ export default function ListScreen() {
   useFocusEffect(
     useCallback(() => {
       loadHotels();
+      return () => {
+        // Close any open swipeable rows when navigating away so they never
+        // remain stuck open when the screen regains focus.
+        swipeableRefs.current.forEach((ref) => ref.close());
+      };
     }, [loadHotels])
   );
 
@@ -130,7 +135,6 @@ export default function ListScreen() {
             style: 'destructive',
             onPress: async () => {
               swipeableRefs.current.get(hotel.id)?.close();
-              setHotels((prev) => prev.filter((h) => h.id !== hotel.id));
               await removeSave(db, 1, hotel.id);
               await loadHotels();
             },

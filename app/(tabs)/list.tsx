@@ -155,14 +155,12 @@ export default function ListScreen() {
     ({ item }: { item: SavedHotel }) => (
       <ReanimatedSwipeable
         ref={getRefCallback(item.id)}
-        // activeOffsetX: activate the swipe gesture after 5 px of horizontal
-        // movement. failOffsetY: abort the swipe if 10 px of vertical movement
-        // is detected first, handing control back to the FlatList scroll.
-        // Together these replace the NativeViewGestureHandler + simultaneousHandlers
-        // approach (which caused gestures to fire simultaneously and jitter in
-        // RNGH v2) with RNGH v2's native horizontal/vertical disambiguation.
-        activeOffsetX={[-5, 5]}
-        failOffsetY={[-10, 10]}
+        // activeOffsetX: activate the swipe gesture after 4 px of horizontal
+        // movement. failOffsetY: abort the swipe only after 15 px of vertical
+        // movement, giving enough tolerance for slightly diagonal swipes while
+        // still handing near-vertical scrolls back to FlatList.
+        activeOffsetX={[-4, 4]}
+        failOffsetY={[-15, 15]}
         onSwipeableOpen={() => {
           swipeableRefs.current.forEach((ref, id) => {
             if (id !== item.id) ref.close();
@@ -178,7 +176,7 @@ export default function ListScreen() {
             <Text style={styles.deleteActionText}>Delete</Text>
           </TouchableOpacity>
         )}
-        friction={1}
+        friction={2}
         rightThreshold={40}
         overshootRight={false}
         overshootFriction={8}

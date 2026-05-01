@@ -102,6 +102,27 @@ export async function initializeDatabase(db: SQLiteDatabase) {
         AND saves.hotel_id = visits.hotel_id
     );
 
+    -- Clean up photos attached to abandoned (rank IS NULL) visits before
+    -- removing the visits themselves, to satisfy the foreign-key constraint.
+    DELETE FROM photos WHERE visit_id IN (SELECT id FROM visits WHERE rank IS NULL);
+
+    -- Remove visits left behind by cancelled or force-quit rating sessions.
+    -- A NULL rank means the insertion score was never assigned, so the visit
+    -- has no ranking value and must not accumulate in the database.
+    DELETE FROM visits WHERE rank IS NULL;
+
+    -- Recover 'been' hotels that lost their ranked visit due to a force-quit
+    -- mid-save (status was written but rank update was rolled back / never ran).
+    -- Reset them to 'want' so the user can complete the ranking flow next time.
+    UPDATE saves SET status = 'want'
+    WHERE status = 'been'
+      AND NOT EXISTS (
+        SELECT 1 FROM visits
+        WHERE visits.user_id = saves.user_id
+          AND visits.hotel_id = saves.hotel_id
+          AND visits.rank IS NOT NULL
+      );
+
     INSERT OR IGNORE INTO tags (name) VALUES
       ('beach'), ('countryside'), ('city'), ('boutique'),
       ('spa'), ('romantic'), ('ski'), ('design'),

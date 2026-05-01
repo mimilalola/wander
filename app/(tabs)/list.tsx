@@ -156,11 +156,11 @@ export default function ListScreen() {
       <ReanimatedSwipeable
         ref={getRefCallback(item.id)}
         // activeOffsetX: activate the swipe gesture after 4 px of horizontal
-        // movement. failOffsetY: abort the swipe only after 15 px of vertical
+        // movement. failOffsetY: abort the swipe only after 20 px of vertical
         // movement, giving enough tolerance for slightly diagonal swipes while
         // still handing near-vertical scrolls back to FlatList.
         activeOffsetX={[-4, 4]}
-        failOffsetY={[-15, 15]}
+        failOffsetY={[-20, 20]}
         onSwipeableOpen={() => {
           swipeableRefs.current.forEach((ref, id) => {
             if (id !== item.id) ref.close();
@@ -179,6 +179,7 @@ export default function ListScreen() {
         friction={2}
         rightThreshold={40}
         overshootRight={false}
+        overshootLeft={false}
         overshootFriction={8}
       >
         <HotelCard

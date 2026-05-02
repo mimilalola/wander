@@ -305,13 +305,12 @@ export default function RatingScreen() {
       await addPhotos(db, newVisitId, photoUris);
     }
 
-    // Dismiss all modal overlays (rating is fullScreenModal; any other modals
-    // above the base stack are removed too).  Then navigate to the tab root.
-    // router.navigate goes back to the existing /(tabs)/ entry already in the
-    // stack rather than pushing a second copy, so pressing back never returns
-    // to hotel detail or search.
+    // Dismiss all modal overlays (rating is fullScreenModal; search is modal too).
+    // Then replace whatever non-modal screen remains (hotel/[id] is a plain push
+    // and won't be dismissed by dismissAll) with the Reception tab so pressing
+    // Back never returns to hotel detail or search.
     router.dismissAll();
-    router.navigate('/(tabs)/');
+    router.replace('/(tabs)/');
   };
 
   const handleSkip = () => {

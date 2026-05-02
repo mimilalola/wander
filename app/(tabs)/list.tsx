@@ -155,12 +155,12 @@ export default function ListScreen() {
     ({ item }: { item: SavedHotel }) => (
       <ReanimatedSwipeable
         ref={getRefCallback(item.id)}
-        // activeOffsetX: activate the swipe gesture after 4 px of horizontal
-        // movement. failOffsetY: abort the swipe only after 20 px of vertical
-        // movement, giving enough tolerance for slightly diagonal swipes while
-        // still handing near-vertical scrolls back to FlatList.
-        activeOffsetX={[-4, 4]}
-        failOffsetY={[-20, 20]}
+        // activeOffsetX: require 8 px of horizontal movement before activating
+        // so incidental thumb drift does not race with the scroll recognizer.
+        // failOffsetY: allow up to 30 px vertical before cancelling so diagonal
+        // swipes (common on glass) still register as intentional horizontal.
+        activeOffsetX={[-8, 8]}
+        failOffsetY={[-30, 30]}
         onSwipeableOpen={() => {
           swipeableRefs.current.forEach((ref, id) => {
             if (id !== item.id) ref.close();
@@ -176,8 +176,8 @@ export default function ListScreen() {
             <Text style={styles.deleteActionText}>Delete</Text>
           </TouchableOpacity>
         )}
-        friction={2}
-        rightThreshold={40}
+        friction={1.5}
+        rightThreshold={30}
         overshootRight={false}
         overshootLeft={false}
         overshootFriction={8}

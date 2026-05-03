@@ -155,12 +155,12 @@ export default function ListScreen() {
     ({ item }: { item: SavedHotel }) => (
       <ReanimatedSwipeable
         ref={getRefCallback(item.id)}
-        // activeOffsetX: require 8 px of horizontal movement before activating
-        // so incidental thumb drift does not race with the scroll recognizer.
-        // failOffsetY: allow up to 30 px vertical before cancelling so diagonal
-        // swipes (common on glass) still register as intentional horizontal.
-        activeOffsetX={[-8, 8]}
-        failOffsetY={[-30, 30]}
+        // activeOffsetX: 5 px activates sooner than scroll can steal the gesture.
+        // failOffsetY: 50 px tolerates natural diagonal thumb movement on glass;
+        // tighter values cause the swipe to cancel before it commits, requiring
+        // multiple attempts — the root cause of the Saved-list inconsistency.
+        activeOffsetX={[-5, 5]}
+        failOffsetY={[-50, 50]}
         onSwipeableOpen={() => {
           swipeableRefs.current.forEach((ref, id) => {
             if (id !== item.id) ref.close();
@@ -176,8 +176,7 @@ export default function ListScreen() {
             <Text style={styles.deleteActionText}>Delete</Text>
           </TouchableOpacity>
         )}
-        friction={1.5}
-        rightThreshold={30}
+        rightThreshold={40}
         overshootRight={false}
         overshootLeft={false}
         overshootFriction={8}

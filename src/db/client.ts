@@ -90,9 +90,6 @@ export async function initializeDatabase(db: SQLiteDatabase) {
     -- These are not valid insertion scores and must not affect rankings or stats.
     UPDATE visits SET rank = NULL WHERE rank > 10.0;
 
-    -- Remove orphaned photos whose visit was deleted without cascading.
-    DELETE FROM photos WHERE visit_id NOT IN (SELECT id FROM visits);
-
     -- Remove orphaned visits that have no corresponding save record.
     -- This cleans up stale data from any previous delete bugs and ensures
     -- stats/rankings are never contaminated by invisible records.
@@ -110,6 +107,11 @@ export async function initializeDatabase(db: SQLiteDatabase) {
     -- A NULL rank means the insertion score was never assigned, so the visit
     -- has no ranking value and must not accumulate in the database.
     DELETE FROM visits WHERE rank IS NULL;
+
+    -- Final sweep: remove any photos whose visit no longer exists.
+    -- This catches photos orphaned by the orphaned-visit deletion above,
+    -- which runs before this sweep and can leave photos referencing deleted visits.
+    DELETE FROM photos WHERE visit_id NOT IN (SELECT id FROM visits);
 
     -- Recover 'been' hotels that lost their ranked visit due to a force-quit
     -- mid-save (status was written but rank update was rolled back / never ran).

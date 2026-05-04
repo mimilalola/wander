@@ -186,8 +186,6 @@ export default function RatingScreen() {
     if (!newVisitId || rating === null) return;
 
     const isNewHotelWinner = winnerId === parseInt(hotelId!);
-    const currentComp = comparisons[compIndex];
-    const compScore = currentComp?.visit.rank ?? 0;
 
     // Accumulate wins/losses WITHOUT relying on stale state
     // (we read them from refs via closure-captured variables in the last step)

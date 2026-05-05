@@ -50,10 +50,9 @@ export async function getVisitedHotels(db: Database, userId: number) {
       )
     )
     .where(
-      and(
-        eq(schema.visits.userId, userId),
-        eq(schema.saves.status, 'been')
-      )
+      sql`${schema.visits.userId} = ${userId}
+          AND ${schema.saves.status} = 'been'
+          AND ${schema.visits.rank} IS NOT NULL`
     )
     .orderBy(desc(schema.visits.createdAt));
 }

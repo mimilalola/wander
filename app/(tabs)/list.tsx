@@ -176,7 +176,7 @@ export default function ListScreen() {
             <Text style={styles.deleteActionText}>Delete</Text>
           </TouchableOpacity>
         )}
-        rightThreshold={40}
+        rightThreshold={30}
         overshootRight={false}
         overshootLeft={false}
         overshootFriction={8}

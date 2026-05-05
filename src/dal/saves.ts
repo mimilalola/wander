@@ -44,7 +44,21 @@ export async function toggleSave(db: Database, userId: number, hotelId: number, 
       await db.delete(schema.saves).where(eq(schema.saves.id, existing[0].id));
       return null;
     }
-    // Change status (e.g. want → been removes from Saved, adds to Slept)
+    // Change status (e.g. want → been removes from Saved, adds to Slept).
+    // Before committing the transition, purge any null-rank visits left from
+    // previously cancelled rating sessions — they have no ranking value and
+    // must not linger to affect queries or stats.
+    if (existing[0].status === 'want' && status === 'been') {
+      await db
+        .delete(schema.visits)
+        .where(
+          and(
+            eq(schema.visits.userId, userId),
+            eq(schema.visits.hotelId, hotelId),
+            sql`${schema.visits.rank} IS NULL`
+          )
+        );
+    }
     await db
       .update(schema.saves)
       .set({ status })
@@ -75,19 +89,6 @@ export async function getSaveForHotel(db: Database, userId: number, hotelId: num
  * so the "top item is always 10.0" rule is never violated.
  */
 export async function removeSave(db: Database, userId: number, hotelId: number) {
-  // 0. Check whether the hotel being deleted currently holds rank = 10.0.
-  //    Done outside the transaction so we can use the result to branch inside.
-  const topCheck = await db
-    .select({ id: schema.visits.id })
-    .from(schema.visits)
-    .where(
-      sql`${schema.visits.userId} = ${userId}
-          AND ${schema.visits.hotelId} = ${hotelId}
-          AND ${schema.visits.rank} = 10.0`
-    )
-    .limit(1);
-  const wasTop = topCheck.length > 0;
-
   await db.transaction(async (tx) => {
     // 1. Find all visits for this hotel by this user
     const visits = await tx
@@ -100,7 +101,19 @@ export async function removeSave(db: Database, userId: number, hotelId: number) 
       await tx.delete(schema.photos).where(eq(schema.photos.visitId, visit.id));
     }
 
-    // 3. Delete all visits for this hotel
+    // 3. Delete all visits for this hotel — check for 10.0 rank before deleting
+    //    so the promotion logic (step 6) knows whether to run.
+    const topCheck = await tx
+      .select({ id: schema.visits.id })
+      .from(schema.visits)
+      .where(
+        sql`${schema.visits.userId} = ${userId}
+            AND ${schema.visits.hotelId} = ${hotelId}
+            AND ${schema.visits.rank} = 10.0`
+      )
+      .limit(1);
+    const wasTop = topCheck.length > 0;
+
     await tx
       .delete(schema.visits)
       .where(and(eq(schema.visits.userId, userId), eq(schema.visits.hotelId, hotelId)));
@@ -110,37 +123,60 @@ export async function removeSave(db: Database, userId: number, hotelId: number) 
       .delete(schema.saves)
       .where(and(eq(schema.saves.userId, userId), eq(schema.saves.hotelId, hotelId)));
 
-    // 5. If the deleted hotel was the top-ranked (10.0), promote the next highest
-    //    hotel in the loved tier (rank 6.6–10.0) to 10.0 so the invariant holds.
-    //    The reads inside the transaction see the already-deleted visits, so the
-    //    deleted hotel is correctly excluded from the nextTop search.
-    if (wasTop) {
-      const nextTop = await tx
-        .select({ id: schema.visits.id })
-        .from(schema.visits)
-        .innerJoin(
-          schema.saves,
-          and(
-            eq(schema.visits.hotelId, schema.saves.hotelId),
-            eq(schema.visits.userId, schema.saves.userId)
-          )
-        )
-        .where(
-          sql`${schema.visits.userId} = ${userId}
-              AND ${schema.saves.status} = 'been'
-              AND ${schema.visits.rank} IS NOT NULL
-              AND ${schema.visits.rank} < 10.0
-              AND ${schema.visits.rank} >= 6.6`
-        )
-        .orderBy(desc(schema.visits.rank))
-        .limit(1);
+    // 5. Nothing to promote if the deleted hotel wasn't the top-ranked one.
+    if (!wasTop) return;
 
-      if (nextTop.length > 0) {
-        await tx
-          .update(schema.visits)
-          .set({ rank: 10.0 })
-          .where(eq(schema.visits.id, nextTop[0].id));
-      }
+    // 6. The deleted hotel held rank 10.0. Before promoting the next hotel,
+    //    verify no other hotel already holds 10.0 (guards against corrupt state
+    //    where two hotels both have rank=10.0 — promoting a third would compound
+    //    the problem). Only promote when there is genuinely no current top.
+    const existingAnotherTop = await tx
+      .select({ id: schema.visits.id })
+      .from(schema.visits)
+      .innerJoin(
+        schema.saves,
+        and(
+          eq(schema.visits.hotelId, schema.saves.hotelId),
+          eq(schema.visits.userId, schema.saves.userId)
+        )
+      )
+      .where(
+        sql`${schema.visits.userId} = ${userId}
+            AND ${schema.saves.status} = 'been'
+            AND ${schema.visits.rank} = 10.0`
+      )
+      .limit(1);
+
+    if (existingAnotherTop.length > 0) return;
+
+    // 7. Promote the next-highest hotel in the loved tier (6.6–10.0) to 10.0.
+    //    Reads here see the already-deleted visits/saves, so the removed hotel is
+    //    correctly excluded without needing an explicit hotelId filter.
+    const nextTop = await tx
+      .select({ id: schema.visits.id })
+      .from(schema.visits)
+      .innerJoin(
+        schema.saves,
+        and(
+          eq(schema.visits.hotelId, schema.saves.hotelId),
+          eq(schema.visits.userId, schema.saves.userId)
+        )
+      )
+      .where(
+        sql`${schema.visits.userId} = ${userId}
+            AND ${schema.saves.status} = 'been'
+            AND ${schema.visits.rank} IS NOT NULL
+            AND ${schema.visits.rank} < 10.0
+            AND ${schema.visits.rank} >= 6.6`
+      )
+      .orderBy(desc(schema.visits.rank))
+      .limit(1);
+
+    if (nextTop.length > 0) {
+      await tx
+        .update(schema.visits)
+        .set({ rank: 10.0 })
+        .where(eq(schema.visits.id, nextTop[0].id));
     }
   });
 }

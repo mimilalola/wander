@@ -61,7 +61,11 @@ export default function MapScreen() {
       const visit = await db
         .select({ rating: schema.visits.rating })
         .from(schema.visits)
-        .where(sql`${schema.visits.userId} = 1 AND ${schema.visits.hotelId} = ${h.id}`)
+        .where(
+          sql`${schema.visits.userId} = 1
+              AND ${schema.visits.hotelId} = ${h.id}
+              AND ${schema.visits.rank} IS NOT NULL`
+        )
         .orderBy(desc(schema.visits.createdAt))
         .limit(1);
       withRatings.push({
